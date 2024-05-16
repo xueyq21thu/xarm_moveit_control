@@ -7,7 +7,7 @@
     joint3_lower_limit:=${-2.0*pi}  joint3_upper_limit:=${2.0*pi}
     joint4_lower_limit:=${-0.19198}  joint4_upper_limit:=${3.927}
     joint5_lower_limit:=${-2.0*pi}  joint5_upper_limit:=${2.0*pi}
-    joint6_lower_limit:=${-1.69297}  joint6_upper_limit:=${pi}
+    joint6_lower_limit:=${-1.5708}  joint6_upper_limit:=${pi}
     joint7_lower_limit:=${-2.0*pi}  joint7_upper_limit:=${2.0*pi}
     model1300:=false
     inertial_params_filename:='' kinematics_params_filename:='' "
