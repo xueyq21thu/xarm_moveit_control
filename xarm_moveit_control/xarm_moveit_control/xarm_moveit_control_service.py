@@ -1,5 +1,8 @@
-from xarm_msgs.srv import SetModbusTimeout, GetInt32, SetInt16, SetInt32, GetSetModbusData, Call, SetFloat32List, PlanPose, PlanExec
-from xarm_moveit_control.hardware_helper import get_dh_gripper_modbus_rtu_code, quaternion_from_euler
+from xarm_msgs.srv import SetModbusTimeout, GetInt32, SetInt16, SetInt32, SetFloat32, GetSetModbusData, Call, SetFloat32List, PlanPose, PlanExec
+from xarm_moveit_control.hardware_helper import get_dh_gripper_modbus_rtu_code, quaternion_from_euler, move_forward
+from copy import deepcopy
+from sympy import symbols, Matrix
+import numpy as np
 
 import rclpy, time
 from rclpy.node import Node
@@ -11,6 +14,7 @@ class XarmMoveitControlService(Node):
     def __init__(self):
         super().__init__('xarm_moveit_control_service')
         xarm_set_position_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
+        xarm_move_forward_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
         set_timeout_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
         get_baudrate_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
         set_baudrate_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
@@ -20,6 +24,7 @@ class XarmMoveitControlService(Node):
         interupt_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
 
         self.xarm_set_position_srv = self.create_service(SetFloat32List, '/xarm_set_position', self.xarm_set_position_callback, callback_group=xarm_set_position_srv_callbackgroup)
+        self.xarm_move_forward_srv = self.create_service(SetFloat32, '/xarm_move_forward', self.xarm_move_forward_callback, callback_group=xarm_move_forward_srv_callbackgroup)
         self.set_timeout_srv = self.create_service(SetModbusTimeout, '/gripper_set_timeout', self.set_gripper_timeout_callback, callback_group=set_timeout_srv_callbackgroup)
         self.get_baudrate_srv = self.create_service(GetInt32, '/gripper_get_baudrate', self.gripper_get_baudrate_callback, callback_group=get_baudrate_srv_callbackgroup)
         self.set_baudrate_srv = self.create_service(SetInt32, '/gripper_set_baudrate', self.gripper_set_baudrate_callback, callback_group= set_baudrate_srv_callbackgroup)
@@ -45,6 +50,9 @@ class XarmMoveitControlService(Node):
         self.get_set_modbus_data_cli = self.create_client(GetSetModbusData, '/xarm/getset_tgpio_modbus_data', callback_group=get_set_modbus_data_cli_callbackgroup)
         self.set_state_cli = self.create_client(SetInt16, '/xarm/set_state', callback_group=set_state_cli_callbackgroup)
 
+        self.position = []
+        self.orientation = []
+
     def xarm_set_position_callback(self, request, response):
         """Set the position of the end effector.
 
@@ -64,11 +72,24 @@ class XarmMoveitControlService(Node):
         xarm_pose_plan_request.target.position.y = request.datas[1]
         xarm_pose_plan_request.target.position.z = request.datas[2]
 
-        quaternion = quaternion_from_euler(request.datas[3:6])
-        xarm_pose_plan_request.target.orientation.x = quaternion[0]
-        xarm_pose_plan_request.target.orientation.y = quaternion[1]
-        xarm_pose_plan_request.target.orientation.z = quaternion[2]
-        xarm_pose_plan_request.target.orientation.w = quaternion[3]
+        if len(request.datas) == 6:
+            quaternion = quaternion_from_euler(request.datas[3:6])
+            xarm_pose_plan_request.target.orientation.x = quaternion[0]
+            xarm_pose_plan_request.target.orientation.y = quaternion[1]
+            xarm_pose_plan_request.target.orientation.z = quaternion[2]
+            xarm_pose_plan_request.target.orientation.w = quaternion[3]
+        elif len(request.datas) == 7:
+            xarm_pose_plan_request.target.orientation.x = request.datas[3]
+            xarm_pose_plan_request.target.orientation.y = request.datas[4]
+            xarm_pose_plan_request.target.orientation.z = request.datas[5]
+            xarm_pose_plan_request.target.orientation.w = request.datas[6]
+        else:
+            self.get_logger().info('illegal data length of xarm_set_position')
+            response.ret = False
+            return response
+        
+        self.position = [xarm_pose_plan_request.target.position.x, xarm_pose_plan_request.target.position.y, xarm_pose_plan_request.target.position.z]
+        self.orientation = [xarm_pose_plan_request.target.orientation.x, xarm_pose_plan_request.target.orientation.y, xarm_pose_plan_request.target.orientation.z, xarm_pose_plan_request.target.orientation.w]
 
         future = self.xarm_pose_plan_cli.call_async(xarm_pose_plan_request)
 
@@ -76,6 +97,54 @@ class XarmMoveitControlService(Node):
             # print(future.result())
             time.sleep(0.1)
         response.ret = (future.result().success is not True)
+
+        if future.result().success:
+            xarm_exec_plan_request = PlanExec.Request()
+            xarm_exec_plan_request.wait = True
+            future = self.xarm_exec_plan_cli.call_async(xarm_exec_plan_request)
+            while not future.done():
+                # print(future.result())
+                time.sleep(0.1)
+            response.ret = (future.result().success is not True)
+
+            return response
+        else:
+            return response
+
+    def xarm_move_forward_callback(self, request, response):
+        self.get_logger().info(f'xarm_move_forward {request.data} m')
+        while not self.xarm_pose_plan_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service xarm_pose_plan not available, waiting again...')
+
+        self.get_logger().info('Service xarm_pose_plan available')
+
+        xarm_pose_plan_request = PlanPose.Request()
+        xarm_pose_plan_request.target.orientation.x = self.orientation[0]
+        xarm_pose_plan_request.target.orientation.y = self.orientation[1]
+        xarm_pose_plan_request.target.orientation.z = self.orientation[2]
+        xarm_pose_plan_request.target.orientation.w = self.orientation[3]
+
+        self.get_logger().info(f'orientation {xarm_pose_plan_request.target.orientation}')
+
+        target_position = move_forward(np.array(self.position), np.array(self.orientation), request.data)
+
+        self.get_logger().info(f'target position {target_position}')
+        self.get_logger().info(f'position x {type(target_position[0])}')
+
+        xarm_pose_plan_request.target.position.x = target_position[0]
+        xarm_pose_plan_request.target.position.y = target_position[1]
+        xarm_pose_plan_request.target.position.z = target_position[2]
+
+        self.get_logger().info(f'position {xarm_pose_plan_request.target.position}')
+        
+        self.position = [xarm_pose_plan_request.target.position.x, xarm_pose_plan_request.target.position.y, xarm_pose_plan_request.target.position.z]
+
+        future = self.xarm_pose_plan_cli.call_async(xarm_pose_plan_request)
+        
+        while not future.done():
+            time.sleep(0.1)
+        response.ret = (future.result().success is not True)
+        print(response.ret)
 
         if future.result().success:
             xarm_exec_plan_request = PlanExec.Request()

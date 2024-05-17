@@ -1,6 +1,21 @@
 from typing import List, Tuple
 import numpy as np
 
+def quaternion_to_rotation_matrix(quaternion):
+    x, y, z, w = quaternion
+    rotation_matrix = np.array([
+        [1 - 2 * y**2 - 2 * z**2, 2 * x * y - 2 * z * w, 2 * x * z + 2 * y * w],
+        [2 * x * y + 2 * z * w, 1 - 2 * x**2 - 2 * z**2, 2 * y * z - 2 * x * w],
+        [2 * x * z - 2 * y * w, 2 * y * z + 2 * x * w, 1 - 2 * x**2 - 2 * y**2]
+    ])
+    return rotation_matrix
+
+def move_forward(current_position, quaternion, distance):
+    rotation_matrix = quaternion_to_rotation_matrix(quaternion)
+    direction = np.dot(rotation_matrix, np.array([0, 0, 1]))
+    target_position = current_position + distance * direction
+    return list(target_position)
+
 def CRC16(nData, wLength) :
     if nData==0x00:
         return 0x0000
