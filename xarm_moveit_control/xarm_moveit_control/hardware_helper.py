@@ -1,20 +1,57 @@
 from typing import List, Tuple
 import numpy as np
 
-def quaternion_to_rotation_matrix(quaternion):
-    x, y, z, w = quaternion
-    rotation_matrix = np.array([
-        [1 - 2 * y**2 - 2 * z**2, 2 * x * y - 2 * z * w, 2 * x * z + 2 * y * w],
-        [2 * x * y + 2 * z * w, 1 - 2 * x**2 - 2 * z**2, 2 * y * z - 2 * x * w],
-        [2 * x * z - 2 * y * w, 2 * y * z + 2 * x * w, 1 - 2 * x**2 - 2 * y**2]
-    ])
-    return rotation_matrix
+# def quaternion_to_rotation_matrix(quaternion):
+#     x, y, z, w = quaternion
+#     rotation_matrix = np.array([
+#         [1 - 2 * y**2 - 2 * z**2, 2 * x * y - 2 * z * w, 2 * x * z + 2 * y * w],
+#         [2 * x * y + 2 * z * w, 1 - 2 * x**2 - 2 * z**2, 2 * y * z - 2 * x * w],
+#         [2 * x * z - 2 * y * w, 2 * y * z + 2 * x * w, 1 - 2 * x**2 - 2 * y**2]
+#     ])
+#     return rotation_matrix
 
-def move_forward(current_position, quaternion, distance):
-    rotation_matrix = quaternion_to_rotation_matrix(quaternion)
-    direction = np.dot(rotation_matrix, np.array([0, 0, 1]))
-    target_position = current_position + distance * direction
-    return list(target_position)
+# def move_forward(current_position, quaternion, distance):
+#     rotation_matrix = quaternion_to_rotation_matrix(quaternion)
+#     direction = np.dot(rotation_matrix, np.array([1, 0, 0]))
+#     target_position = current_position + distance * direction
+#     return list(target_position)
+
+def rotation_matrix(r, y, p):
+    """
+    计算绕x轴、y轴和z轴的旋转矩阵。
+    r: 绕x轴的旋转角
+    y: 绕y轴的旋转角
+    p: 绕z轴的旋转角
+    """
+    # 将角度转换为弧度
+    # r, y, p = np.radians(r), np.radians(y), np.radians(p)
+
+    # 绕x轴的旋转矩阵
+    Rx = np.array([[1, 0, 0],
+                   [0, np.cos(r), -np.sin(r)],
+                   [0, np.sin(r), np.cos(r)]])
+
+    # 绕y轴的旋转矩阵
+    Ry = np.array([[np.cos(y), 0, np.sin(y)],
+                   [0, 1, 0],
+                   [-np.sin(y), 0, np.cos(y)]])
+
+    # 绕z轴的旋转矩阵
+    Rz = np.array([[np.cos(p), -np.sin(p), 0],
+                   [np.sin(p), np.cos(p), 0],
+                   [0, 0, 1]])
+
+    # 计算总的旋转矩阵
+    R = Rz @ Ry @ Rx
+    return R
+
+def move_forward(current_position, eular_angle, distance):
+    R = rotation_matrix(eular_angle[0], eular_angle[1], eular_angle[2])
+    init_coord = np.array(current_position)
+    rotated_coord = R @ [0, 0, 1]
+    new_coord = init_coord + distance * rotated_coord 
+    return new_coord
+
 
 def CRC16(nData, wLength) :
     if nData==0x00:
@@ -81,3 +118,33 @@ def quaternion_from_euler(orientation):
     z = cos_Roll * cos_Pitch * sin_Yaw - sin_Roll * sin_Pitch * cos_Yaw
 
     return [x, y, z, w]
+
+def euler_from_quaternion(quaternion):
+    """
+    Convert quaternion to Euler angles.
+    :param quaternion: The quaternion in the form [x, y, z, w]
+    :return: The Euler angles in the form [roll, pitch, yaw]
+    """
+    x = quaternion[0]
+    y = quaternion[1]
+    z = quaternion[2]
+    w = quaternion[3]
+
+    # roll (X-axis rotation)
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+    # pitch (Y-axis rotation)
+    sinp = 2 * (w * y - z * x)
+    if np.abs(sinp) >= 1:
+        pitch = np.copysign(np.pi / 2, sinp)  # use 90 degrees if out of range
+    else:
+        pitch = np.arcsin(sinp)
+
+    # yaw (Z-axis rotation)
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+    return [roll, pitch, yaw]
