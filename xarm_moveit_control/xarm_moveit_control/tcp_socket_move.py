@@ -54,14 +54,14 @@ class TcpSocket(Node):
             if len(data) == 0:
                 print("No data received.")
                 break
-            else:
+            else: 
                 print("Data received: ", data)
                 # pose = np.array(self.init_pose) + data - self.init_data
                 pose = data - self.init_data
                 xarm_pose_plan_request = PlanPose.Request()
-                xarm_pose_plan_request.target.position.x = float(pose[0])
-                xarm_pose_plan_request.target.position.y = float(pose[1])
-                xarm_pose_plan_request.target.position.z = float(pose[2])
+                xarm_pose_plan_request.target.position.x = pose[0]
+                xarm_pose_plan_request.target.position.y = pose[1]
+                xarm_pose_plan_request.target.position.z = pose[2]
                 
                 quaternion = quaternion_from_euler(pose[3:6])
                 xarm_pose_plan_request.target.orientation.x = quaternion[0]
