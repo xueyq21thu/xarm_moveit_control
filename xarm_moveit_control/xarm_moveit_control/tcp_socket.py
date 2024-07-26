@@ -46,7 +46,7 @@ class TcpSocket(Node):
         print(f"Receiving from {addr}.")
         while cli:
             data = cli.recv(48)
-            data = np.frombuffer(data, dtype=np.int64)
+            data = np.frombuffer(data, dtype=np.float64)
             if not self.init_data_received:
                 self.init_data_received = True
                 self.init_data = data
