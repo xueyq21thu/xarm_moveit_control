@@ -187,11 +187,13 @@ class XarmMoveitControlService(Node):
         return response
 
     def gripper_get_baudrate_callback(self, request, response):
+        
         """Get baudrate.
 
         e.g.
             ros2 service call /gripper_get_baudrate /xarm_msgs/srv/GetInt32
         """
+        
         self.get_logger().info(f'gripper_get_baudrate')
         while not self.get_baudrate_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service get_int32 not available, waiting again...')
@@ -200,7 +202,6 @@ class XarmMoveitControlService(Node):
         while not future.done():
             time.sleep(0.1)
         future = self.get_baudrate_cli.call_async(get_int32_request)
-        # rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
         
         if future.result() is not None:
             response.ret = future.result().ret

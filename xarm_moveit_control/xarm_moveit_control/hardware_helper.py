@@ -148,3 +148,17 @@ def euler_from_quaternion(quaternion):
     yaw = np.arctan2(siny_cosp, cosy_cosp)
 
     return [roll, pitch, yaw]
+
+def dec_to_hex(dec):
+    
+    # positon limit to protect gripper
+    if dec >= 1000:
+        dec = 1000
+    elif dec < 0:
+        dec = 0
+    code1 = dec // 256
+    code2 = dec % 256
+    return code1, code2
+
+def hex_to_dec(hex1, hex2):
+    return hex1 * 256 + hex2
