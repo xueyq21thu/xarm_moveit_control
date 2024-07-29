@@ -20,15 +20,21 @@ class ClientSocket(Node):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         
-    def cli_send(self, pose):
+    def cli_send(self):
         self.client.connect((self.host, self.port))
         print("Connected to server.")
 
-        # pose = np.array([0.3, 0.3, 0.3, 0, 0, 0, 1], dtype=np.float64)
-        pose = np.array(pose,dtype=np.float64)
-        pose = pose.tobytes()
-        self.client.sendall(pose)
-        time.sleep(0.1)
+        for i in range(100):
+
+            pose = np.array([400, 0, 600, 3.14, 0.0, 0.0], dtype=np.float64)
+            step = np.array([0,0,1,0,0,0],dtype=np.float64)
+            pose = step*i + pose
+            pose = np.array(pose,dtype=np.float64)
+            pose = pose.tobytes()
+            self.client.sendall(pose)
+            # time.sleep(0.5)
+            
+        self.client.close()
 
         
         # for i in range(0,1000):
@@ -56,14 +62,14 @@ class TopicSubTest(Node):
 def main():
     rclpy.init()
     
-    # client = ClientSocket()
-    # client.cli_send()
-    sub = TopicSubTest("Sub_test")
+    client = ClientSocket()
+    client.cli_send()
+    # sub = TopicSubTest("Sub_test")
     # rclpy.spin(sub)
     # rclpy.spin_until_future_complete(sub, sub.done())
-    rclpy.spin_once(sub)
+    # rclpy.spin_once(sub)
     print("Shit")
-    sub.destroy_node()
+    # sub.destroy_node()
     rclpy.shutdown()
     
             

@@ -32,7 +32,9 @@ class XarmMoveitControlService(Node):
         self.activate_srv = self.create_service(Call, '/gripper_activate', self.gripper_activate_callback, callback_group=activate_srv_callbackgroup)
         self.deactivate_srv = self.create_service(Call, '/gripper_deactivate', self.gripper_deactivate_callback, callback_group=deactivate_srv_callbackgroup)
         self.interupt_srv = self.create_service(Call, '/xarm_interupt', self.xarm_interupt_callback, callback_group=interupt_srv_callbackgroup)
-        # self.srv = self.create_service(GetSetModbusData, 'gripper_get_position', self.gripper_get_position_callback)
+        
+        # reset state
+        self.reset_srv = self.create_service(Call, 'reset_srv',self.reset_srv_callback, callback_group=MutuallyExclusiveCallbackGroup())
 
         xarm_straight_plan_cli_callbackgroup = MutuallyExclusiveCallbackGroup()
         set_modbus_timeout_cli_callbackgroup = MutuallyExclusiveCallbackGroup()
@@ -51,6 +53,11 @@ class XarmMoveitControlService(Node):
         self.set_baudrate_cli = self.create_client(SetInt32, '/xarm/set_tgpio_modbus_baudrate', callback_group=set_baudrate_cli_callbackgroup)
         self.get_set_modbus_data_cli = self.create_client(GetSetModbusData, '/xarm/getset_tgpio_modbus_data', callback_group=get_set_modbus_data_cli_callbackgroup)
         self.set_state_cli = self.create_client(SetInt16, '/xarm/set_state', callback_group=set_state_cli_callbackgroup)
+
+
+        # reset cli
+        self.error_cli = self.create_client(Call,'xarm/clean_error',callback_group=MultiThreadedExecutor)
+        self.warn_cli = self.create_client(Call,'xarm/clean_warn',callback_group=MultiThreadedExecutor())
 
         self.position = []
         self.orientation = []
@@ -105,6 +112,10 @@ class XarmMoveitControlService(Node):
         while not future.done():
             # print(future.result())
             time.sleep(0.1)
+
+        # while True:
+        #     print(1)
+        
         response.ret = (future.result().success is not True)
 
         if future.result().success:
@@ -311,11 +322,11 @@ class XarmMoveitControlService(Node):
         # rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
         while not future.done():
             time.sleep(0.1)
-        if future.result() is not None:
-            response.ret = future.result().ret
-            response.message = future.result().message
-        else:
-            raise Exception(f'Service get_set_modbus_data failed {future.exception()}')
+        # if future.result() is not None:
+        #     response.ret = future.result().ret
+        #     response.message = future.result().message
+        # else:
+        #     raise Exception(f'Service get_set_modbus_data failed {future.exception()}')
         
         return response
     
@@ -346,6 +357,23 @@ class XarmMoveitControlService(Node):
             raise Exception(f'Service set_state failed {future.exception()}')
         
         return response
+    
+    def reset_srv_callback(self,request):
+        state = SetInt16.Request()
+        # # state 7 is on the fly mode
+        # # state 0 is normal mode
+        # state.data = 7
+        state.data = 0
+        future = self.set_state_cli.call_async(state)
+        rclpy.spin_until_future_complete(self,future)
+        
+        print("State set success!")
+        
+        call = Call.Request()
+        self.error_cli.call_async(call)
+        self.warn_cli.call_async(call)
+        
+        print("State Reset!")
 
 def main():
     rclpy.init()
