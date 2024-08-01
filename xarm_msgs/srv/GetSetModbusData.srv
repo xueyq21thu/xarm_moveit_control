@@ -8,7 +8,7 @@ uint8[] modbus_data
 int16 modbus_length 0
 
 # Specify the anticipated maximum respond data length in bytes
-int16 ret_length
+int16 ret_length  8
 
 # host id, 9: END RS485, 10: Controller RS485
 uint8 host_id 9

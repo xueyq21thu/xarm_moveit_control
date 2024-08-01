@@ -9,6 +9,8 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 
+import threading
+
 class XarmMoveitControlService(Node):
 
     def __init__(self):
@@ -56,8 +58,8 @@ class XarmMoveitControlService(Node):
 
 
         # reset cli
-        self.error_cli = self.create_client(Call,'xarm/clean_error',callback_group=MultiThreadedExecutor)
-        self.warn_cli = self.create_client(Call,'xarm/clean_warn',callback_group=MultiThreadedExecutor())
+        self.error_cli = self.create_client(Call,'/xarm/clean_error',callback_group=MutuallyExclusiveCallbackGroup())
+        self.warn_cli = self.create_client(Call,'/xarm/clean_warn',callback_group=MutuallyExclusiveCallbackGroup())
 
         self.position = []
         self.orientation = []
@@ -358,22 +360,31 @@ class XarmMoveitControlService(Node):
         
         return response
     
-    def reset_srv_callback(self,request):
+    def reset_srv_callback(self,request,response):
         state = SetInt16.Request()
         # # state 7 is on the fly mode
         # # state 0 is normal mode
         # state.data = 7
         state.data = 0
         future = self.set_state_cli.call_async(state)
-        rclpy.spin_until_future_complete(self,future)
+        # rclpy.spin_until_future_complete(self,future)
         
         print("State set success!")
         
         call = Call.Request()
         self.error_cli.call_async(call)
-        self.warn_cli.call_async(call)
+        future = self.warn_cli.call_async(call)
         
+        # rclpy.spin_until_future_complete(self,future)
+        while not future.done():
+            time.sleep(0.1)
+        response.ret = future.result().ret
+        response.message = future.result().message
+
         print("State Reset!")
+        return response
+
+
 
 def main():
     rclpy.init()

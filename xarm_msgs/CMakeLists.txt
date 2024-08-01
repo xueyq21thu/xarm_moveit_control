@@ -47,6 +47,7 @@ set(srv_files
   ${srv_dir}/BioGripperCtrl.srv
   ${srv_dir}/BioGripperEnable.srv
   ${srv_dir}/Call.srv
+
   ${srv_dir}/GetAnalogIO.srv
   ${srv_dir}/GetDigitalIO.srv
   ${srv_dir}/GetFloat32.srv
@@ -93,6 +94,8 @@ set(srv_files
   ${srv_dir}/PlanJoint.srv
   ${srv_dir}/PlanPose.srv
   ${srv_dir}/PlanSingleStraight.srv
+
+  ${srv_dir}/Gripper.srv
 )
 
 # set(active_files

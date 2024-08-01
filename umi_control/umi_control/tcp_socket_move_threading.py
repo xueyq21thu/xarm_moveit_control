@@ -27,7 +27,6 @@ class TcpSocket(Node):
         
         self.pose_move_cli = self.create_client(MoveCartesian,'/xarm/set_position')
         self.set_state_cli = self.create_client(SetInt16,'xarm/set_state')
-        self.set_mode_cli = self.create_client(SetInt16,'xarm/set_mode')
         self.warn_cli = self.create_client(Call,'xarm/clean_warn')
         self.error_cli = self.create_client(Call,'xarm/clean_error')
         # self.pose_plan_cli = self.create_client(PlanPose, '/xarm_pose_plan', callback_group=MutuallyExclusiveCallbackGroup())
@@ -48,8 +47,8 @@ class TcpSocket(Node):
         self.init_pose = np.array(self.init_pose)
         
         
-        path = os.path.join('./src/xarmmoveitcontrol-humble/xarm_moveit_control/xarm_moveit_control', 'move_config.json')
-        print(path)
+        path = os.path.join('./src/xarmmoveitcontrol-humble/umi_control/umi_control', 'config.json')
+        # print(path)
         with open(path, 'r') as f:
             config = json.load(f)
         self.speed = config['speed']
@@ -74,15 +73,11 @@ class TcpSocket(Node):
         state = SetInt16.Request()
         # # state 7 is on the fly mode
         # # state 0 is normal mode
-
-        state.data = 0
+        state.data = 7
+        # state.data = 0
         future = self.set_state_cli.call_async(state)
         # print(12)
         rclpy.spin_until_future_complete(self, future)
-        state.data = 7
-        future = self.set_mode_cli.call_async(state)
-        rclpy.spin_until_future_complete(self, future)
-
         # print(1)
         
         print("State set success!")
@@ -129,18 +124,7 @@ class TcpSocket(Node):
                 print("Data received: ", data_selected)
                 pose = self.init_pose + data_selected - self.init_data
                 # pose[3:6] = data_selected[3:6]
-                # self.position.append(pose)
-                xarm_pose_request = MoveCartesian.Request()
-                xarm_pose_request.speed = self.speed
-                xarm_pose_request.acc = self.acc
-                xarm_pose_request.mvtime = self.mvtime
-                xarm_pose_request.pose = pose.tolist()
-                future = self.pose_move_cli.call_async(xarm_pose_request)
-                rclpy.spin_until_future_complete(self, future)
-                if future.result().ret == 0:
-                    print("Pose Planned!")
-                time.sleep(0.1)
-
+                self.position.append(pose)
                 # print(pose)
                 
                 # setup request
@@ -200,9 +184,8 @@ def main():
     tcp_socket = TcpSocket()
     executor = MultiThreadedExecutor()
     executor.add_node(tcp_socket)
-    tcp_socket.srv_sock()
-    # t1 = threading.Thread(target=tcp_socket.srv_sock).start()
-    # t2 = threading.Thread(target=tcp_socket.move_arm).start()
+    t1 = threading.Thread(target=tcp_socket.srv_sock).start()
+    t2 = threading.Thread(target=tcp_socket.move_arm).start()
     # rclpy.spin(tcp_socket)
     executor.spin()
     rclpy.shutdown()

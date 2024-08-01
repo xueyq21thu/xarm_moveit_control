@@ -1,0 +1,8 @@
+# service com format for gripper
+
+float32 width   0
+
+---
+
+int32 ret   0
+string msg

@@ -1,15 +1,21 @@
 # from xarm_moveit_control_service import XarmMoveitControlService
 from xarm_msgs.srv import SetModbusTimeout, GetInt32, SetInt16, SetInt32, SetFloat32, GetSetModbusData, Call, SetFloat32List, PlanPose, PlanExec, MoveCartesian, PlanSingleStraight
-from xarm_moveit_control.hardware_helper import get_dh_gripper_modbus_rtu_code, quaternion_from_euler, move_forward, euler_from_quaternion, dec_to_hex
+from xarm_moveit_control.hardware_helper import get_dh_gripper_modbus_rtu_code, quaternion_from_euler, move_forward, euler_from_quaternion, dec_to_hex, hex_to_dec
 from copy import deepcopy
 from sympy import symbols, Matrix
 import numpy as np
-
+from array import array
 import rclpy, time
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 
+def decode_modbus_data(byte_array):
+    # 将 array('B') 转换为字节串
+    byte_string = byte_array.tobytes()
+    # 假设数据是 ASCII 编码的字符串
+    decoded_string = byte_string.decode('ascii')
+    return decoded_string
 class GripperControlService(Node):
     def __init__(self):
         super().__init__('gripper_control_service')
@@ -36,7 +42,7 @@ class GripperControlService(Node):
         
         self.get_logger().info('Initializing gripper...')
         
-        timeout = 500
+        timeout = 2000
         
         set_modbus_timeout_request = SetModbusTimeout.Request()
         set_modbus_timeout_request.timeout = timeout
@@ -93,10 +99,12 @@ class GripperControlService(Node):
         while not self.get_set_modbus_data_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service get_set_modbus_data not available, waiting again...')
             
-        self.get_logger().info('Getting gripper position...')
+        # self.get_logger().info('Getting gripper position...')
 
         get_set_modbus_data_request = GetSetModbusData.Request()
+        # send this code to return position
         get_set_modbus_data_request.modbus_data = [1, 3, 2, 2, 0, 1, 0x24, 0x72]
+        get_set_modbus_data_request.ret_length = 16
         
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
 
@@ -106,14 +114,17 @@ class GripperControlService(Node):
         if future.result() is not None:
             response.ret = future.result().ret
             response.message = future.result().message
+            size = future.result().ret_data
             
-        else:
-            raise Exception(f'Service get_set_modbus_data failed {future.exception()}')
-        
-        size = future.result().ret_data
-        
-        print(size)
+        # else:
+        #     raise Exception(f'Service get_set_modbus_data failed {future.exception()}')
+        # print(f"shit:{size}")
+        # print(size.tolist())
+        width = hex_to_dec(size[3],size[4])
 
+
+        # decoded_data = decode_modbus_data(size)
+        # print(decoded_data)
         return response
     
     def set_gripper_callback(self, request, response):
@@ -131,18 +142,22 @@ class GripperControlService(Node):
         get_set_modbus_data_request = GetSetModbusData.Request()
         code1, code2 = dec_to_hex(request.data)
         get_set_modbus_data_request.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(code1, code2))
+        get_set_modbus_data_request.ret_length = 16
         
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
 
         while not future.done():
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         if future.result() is not None:
             response.ret = future.result().ret
             response.message = future.result().message
+            size = future.result().ret_data
 
         else:
             raise Exception(f'Service get_set_modbus_data failed {future.exception()}')
+        
+        print(size.tolist())
         
         return response
 
