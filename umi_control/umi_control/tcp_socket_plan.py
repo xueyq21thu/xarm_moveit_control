@@ -23,25 +23,26 @@ class TcpSocket(Node):
         self.host = server_ip
         self.port = server_port
         self.position = []
-        # self.pose_plan_cli = self.create_client(PlanPose, '/xarm_pose_plan')
-        # self.pose_plan_cli = self.create_client(SetFloat32List,'xarm_set_position',callback_group=MutuallyExclusiveCallbackGroup())
         self.pose_plan_cli = self.create_client(PlanPose, '/xarm_pose_plan', callback_group=MutuallyExclusiveCallbackGroup())
-        # self.init_pose_sub = self.create_subscription(RobotMsg, '/xarm/robot_msg', self.init_pose_callback, 10)
+        self.xarm_exec_plan_cli = self.create_client(PlanExec, '/xarm_exec_plan', callback_group=MutuallyExclusiveCallbackGroup())        
         self.warn_cli = self.create_client(Call,'xarm/clean_warn')
         self.error_cli = self.create_client(Call,'xarm/clean_error')
+        
+        self.get_pose = self.create_client(GetFloat32List,'/xarm/get_position')
+
         self.init_pose = []
         self.init_data = []
         self.init_pose_received = False
         self.init_data_received = False
         
-        # get initial pose
-        self.get_pose = self.create_client(GetFloat32List,'/xarm/get_position')
-        Getpose = GetFloat32List.Request()
-        future = self.get_pose.call_async(Getpose)
-        rclpy.spin_until_future_complete(self, future)
-        print(future.result())
-        self.init_pose = future.result().datas
-        self.init_pose = np.array(self.init_pose)
+        # # get initial pose
+        # self.get_pose = self.create_client(GetFloat32List,'/xarm/get_position')
+        # Getpose = GetFloat32List.Request()
+        # future = self.get_pose.call_async(Getpose)
+        # rclpy.spin_until_future_complete(self, future)
+        # print(future.result())
+        # self.init_pose = future.result().datas
+        # self.init_pose = np.array(self.init_pose)
     
     def srv_sock(self):
         print("server is starting...")
@@ -70,20 +71,29 @@ class TcpSocket(Node):
                 print("No data received.")
                 break
             else: 
-                # print("Data received: ", data)
+                print("Data received: ", data)
                 pose = self.init_pose + data - self.init_data
-                pose[3:6] = data[3:6]
+                # pose[3:6] = data[3:6]
                 self.position.append(pose)
     
     def move_arm(self):
-        print("t2")
+        print("Initiating pose...")
+        
+        Getpose = GetFloat32List.Request()
+        future = self.get_pose.call_async(Getpose)
+        rclpy.spin_until_future_complete(self, future)
+        self.init_pose = future.result().datas
+        self.init_pose = np.array(self.init_pose)
+        
+        print("Init pose: ", self.init_pose)
+        
         xarm_pose_plan_request = PlanPose.Request()
 
         while rclpy.ok():
             if len(self.position) != 0:
                 pose = self.position.pop()
-                        # pose 0 1 2 in m
-
+                print("Moving to pose: ", pose)
+                # pose 0 1 2 in m
                 xarm_pose_plan_request.target.position.x = pose[0] / 1000
                 xarm_pose_plan_request.target.position.y = pose[1] / 1000
                 xarm_pose_plan_request.target.position.z = pose[2] / 1000
@@ -93,17 +103,17 @@ class TcpSocket(Node):
                 xarm_pose_plan_request.target.orientation.y = quaternion[1]
                 xarm_pose_plan_request.target.orientation.z = quaternion[2]
                 xarm_pose_plan_request.target.orientation.w = quaternion[3]
-                # future = self.pose_move_cli.call(xarm_pose_request)
+                
+                print("Sending request...")
                 future = self.pose_plan_cli.call_async(xarm_pose_plan_request)
                 rclpy.spin_until_future_complete(self, future)
-                # print(future.result().ret)
-                # if future.result().ret == 0:
-                #     print("Pose Planned!")
+                if future.result().success:
+                    xarm_exec_plan_request = PlanExec.Request()
+                    xarm_exec_plan_request.wait = True
+                    future = self.xarm_exec_plan_cli.call_async(xarm_exec_plan_request)
+                    rclpy.spin_until_future_complete(self, future)
                 print(pose)
                 self.position.clear()
-                # time.sleep(0.5)
-                # self.position.append(pose)
-                # print("Pose Planned!")
             else:
                 # print("No data received.")
                 pass
@@ -118,7 +128,6 @@ def main():
     executor.add_node(tcp_socket)
     t1 = threading.Thread(target=tcp_socket.srv_sock).start()
     t2 = threading.Thread(target=tcp_socket.move_arm).start()
-    # rclpy.spin(tcp_socket)
     executor.spin()
     rclpy.shutdown()
     
