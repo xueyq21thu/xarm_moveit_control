@@ -104,7 +104,7 @@ class GripperControlService(Node):
         get_set_modbus_data_request = GetSetModbusData.Request()
         # send this code to return position
         get_set_modbus_data_request.modbus_data = [1, 3, 2, 2, 0, 1, 0x24, 0x72]
-        get_set_modbus_data_request.ret_length = 16
+        get_set_modbus_data_request.ret_length = 8
         
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
 
@@ -116,15 +116,10 @@ class GripperControlService(Node):
             response.message = future.result().message
             size = future.result().ret_data
             
-        # else:
-        #     raise Exception(f'Service get_set_modbus_data failed {future.exception()}')
-        # print(f"shit:{size}")
-        # print(size.tolist())
+        size = size.tolist()
+
         width = hex_to_dec(size[3],size[4])
-
-
-        # decoded_data = decode_modbus_data(size)
-        # print(decoded_data)
+        print(f"Width: {width}")
         return response
     
     def set_gripper_callback(self, request, response):
@@ -142,7 +137,7 @@ class GripperControlService(Node):
         get_set_modbus_data_request = GetSetModbusData.Request()
         code1, code2 = dec_to_hex(request.data)
         get_set_modbus_data_request.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(code1, code2))
-        get_set_modbus_data_request.ret_length = 16
+        get_set_modbus_data_request.ret_length = 8
         
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
 

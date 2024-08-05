@@ -8,19 +8,26 @@ import time, os, json
 import zerorpc
 from typing import Tuple, List
 
+# position limit to protect gripper, configured in `config.json`
+path = os.path.join('./src/xarmmoveitcontrol-humble/umi_control/umi_control', 'config.json')
+with open(path, 'r') as f:
+    config = json.load(f)
+max_width = config['g_max']
 
+# transfer decimal width to hex code for DH gripper
 def dec_to_hex(dec):
-    
     # positon limit to protect gripper
-    dec = min(750, dec)
+    dec = min(max_width, dec)
     dec = max(0, dec)
     code1 = dec // 256
     code2 = dec % 256
     return code1, code2
 
+# transfer hex codes to decimal width for DH gripper
 def hex_to_dec(hex1, hex2):
     return hex1 * 256 + hex2
 
+# CRC16 calculation for DH gripper
 def CRC16(nData, wLength) :
     if nData==0x00:
         return 0x0000
@@ -37,6 +44,7 @@ def CRC16(nData, wLength) :
                 wCRCWord>>=1
     return wCRCWord
 
+# standard modbus rtu code generation for DH gripper
 def get_dh_gripper_modbus_rtu_code(
         addr_code: int=0x01,
         function_code: int=0x06,
@@ -59,6 +67,7 @@ def get_dh_gripper_modbus_rtu_code(
 
     return (*modbus_rtu_data, *crc_data)
 
+# decode modbus data
 def decode_modbus_data(byte_array):
     # 将 array('B') 转换为字节串
     byte_string = byte_array.tobytes()
@@ -68,19 +77,25 @@ def decode_modbus_data(byte_array):
 
 class GripperSrv(Node):
     def __init__(self) -> None:
-        super().__init__('gripper')
+        super().__init__('gripper') # node name
         path = os.path.join('./src/xarmmoveitcontrol-humble/umi_control/umi_control', 'config.json')
         with open(path, 'r') as f:
             config = json.load(f)
+        # get parameters from config.json
         self.host = config['host']
         self.port = config['port']
+        self.max_width = config['g_max']
         
         self.get_gripper_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
         self.set_gripper_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
         self.get_set_modbus_data_cli_callbackgroup = MutuallyExclusiveCallbackGroup()
         self.set_modbus_timeout_cli_callbackgroup = MutuallyExclusiveCallbackGroup() 
-                
+        
+        # create client
+        # modbus to send or get data
         self.get_set_modbus_data_cli = self.create_client(GetSetModbusData, '/xarm/getset_tgpio_modbus_data', callback_group=self.get_set_modbus_data_cli_callbackgroup)
+        
+        # necessaries to initialize gripper
         self.set_baudrate_cli = self.create_client(SetInt32, '/xarm/set_tgpio_modbus_baudrate', callback_group=MutuallyExclusiveCallbackGroup() )
         self.set_modbus_timeout_cli = self.create_client(SetModbusTimeout, '/xarm/set_tgpio_modbus_timeout', callback_group=MutuallyExclusiveCallbackGroup())
             
@@ -114,12 +129,12 @@ class GripperSrv(Node):
         
         get_set_modbus_data_request = GetSetModbusData.Request()
         get_set_modbus_data_request1 = GetSetModbusData.Request()
+        # this code is to initialize the gripper, gripper opens after this code
         get_set_modbus_data_request.modbus_data = [1, 6, 1, 0, 0, 1, 73, 246]
-
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
         rclpy.spin_until_future_complete(self, future)
         
-        # set force value
+        # set force value in percentage, valid in code[4] and code[5], range: 20-80
         get_set_modbus_data_request1.modbus_data = [1, 6, 1, 1, 0, 50, 0x59, 0xfe]
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request1)
         rclpy.spin_until_future_complete(self, future)
@@ -127,14 +142,17 @@ class GripperSrv(Node):
         self.get_logger().info('Gripper Opened.')
 
     def get_width(self):
-            get_set_modbus_data_request = GetSetModbusData.Request()
-            get_set_modbus_data_request.modbus_data = [1, 3, 2, 2, 0, 1, 0x24, 0x72]
-            get_set_modbus_data_request.ret_length = 8
-            future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
-            rclpy.spin_until_future_complete(self,future)
-            size = future.result().ret_data
-            width = hex_to_dec(size[3],size[4])
-            return width
+        # get gripper width
+        get_set_modbus_data_request = GetSetModbusData.Request()
+        # this code is to get the gripper width
+        get_set_modbus_data_request.modbus_data = [1, 3, 2, 2, 0, 1, 0x24, 0x72]
+        # return length must be needed
+        get_set_modbus_data_request.ret_length = 8
+        future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
+        rclpy.spin_until_future_complete(self,future)
+        size = future.result().ret_data
+        width = hex_to_dec(size[3],size[4])
+        return width
             
     def rpc_gripper_control(self,msg = 0):
         # set gripper width
@@ -143,7 +161,7 @@ class GripperSrv(Node):
         print(f"get width:{width}")
         code1, code2 = dec_to_hex(width)
         get_set_modbus_data_request = GetSetModbusData.Request()
-                
+        # this code is to set the gripper width
         get_set_modbus_data_request.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(code1, code2))
     
         future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
@@ -151,33 +169,9 @@ class GripperSrv(Node):
         rclpy.spin_until_future_complete(self,future)
 
         reply = self.get_width()
-        
-        
-        # get gripper width
-        # while True:
-        #     get_set_modbus_data_request.modbus_data = [1, 3, 2, 2, 0, 1, 0x24, 0x72]
-        #     get_set_modbus_data_request.ret_length = 8
-        #     future = self.get_set_modbus_data_cli.call_async(get_set_modbus_data_request)
-        #     rclpy.spin_until_future_complete(self,future)
-        #     size = future.result().ret_data
-        #     width = hex_to_dec(size[3],size[4])
-        #     if abs(width - msg) < 3:
-        #         break
-
-        # print(f"ret width:{width}")
-        # reply = width
             
         return reply
-    
-    def rpc_gripper_return(self):
-        # get gripper width
-        # print("return gripper width")
-        width = self.get_width()
-        
-        # print(f"ret width:{width}")
-        reply = width
-            
-        return reply    
+ 
 
 def main():
     rclpy.init()
@@ -186,15 +180,15 @@ def main():
     print("Gripper initialized.")
     executor = MultiThreadedExecutor()
     executor.add_node(srv)
+    # set the dictionary for the server
     method = {'command': srv.rpc_gripper_control,
-             'check': srv.rpc_gripper_return}
+             'check': srv.get_width}
     server = zerorpc.Server(method)
     try:
         tcp = f"tcp://{srv.host}:{srv.port}"
         server.bind(tcp)
         print(f"Server is running on {tcp}")
         server.run()
-
     finally:
         server.close()
         rclpy.shutdown()
