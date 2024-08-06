@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'umi_control'
+package_name = 'force_control'
 
 setup(
     name=package_name,
@@ -20,8 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'gripper = umi_control.gripper:main',
-            'tcp_move = umi_control.tcp_socket_move:main',
+            "init = force_control.ft_init:main",
         ],
     },
 )

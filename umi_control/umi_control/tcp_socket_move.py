@@ -128,6 +128,7 @@ class TcpSocket(Node):
         rclpy.spin_until_future_complete(self, future)
         self.init_pose = future.result().datas
         self.init_pose = np.array(self.init_pose)
+        self.position = self.init_pose.tolist()
           
         print("Init pose: ", self.init_pose)
               
@@ -182,17 +183,14 @@ class TcpSocket(Node):
                 
                 Getpose = GetFloat32List.Request()
                 future = self.get_pose.call_async(Getpose)
-                
-                if not hasattr(self, 'executor'):
-                    self.executor = MultiThreadedExecutor()
-                    self.executor.add_node(self)
-
                 rclpy.spin_until_future_complete(self, future)
                 self.position = future.result().datas.tolist()
+                # print(self.position)
             else:
                 pass
             
     def ret_pose_rpc(self):
+        print(f"ret:{self.position}")
         return self.position
         # return pose.tolist()
     
@@ -206,24 +204,7 @@ class TcpSocket(Node):
         pose = self.init_pose - self.init_data + data
         pose[3:6] = data[3:6]
         self.cmd = pose
-        
-        # # set the speed, acceleration and move time
-        # xarm_pose_request = MoveCartesian.Request()
-        # xarm_pose_request.speed = self.speed
-        # xarm_pose_request.acc = self.acc
-        # xarm_pose_request.mvtime = self.mvtime
-        # xarm_pose_request.pose = pose.tolist()
-        # future = self.pose_move_cli.call_async(xarm_pose_request)
-        # rclpy.spin_until_future_complete(self, future)
-        # if future.result().ret == 0:
-        #     print("Pose Planned!")
-        
-        # now_pose = GetFloat32List.Request()
-        # future = self.get_pose.call_async(now_pose)
-        # # rclpy.spin_until_future_complete(self,future)
-        # ret = future.result().datas
-        
-        # return ret.tolist()
+        print(f"cmd:{pose}")
         return pose.tolist()
         
 
@@ -240,13 +221,13 @@ def main():
            'check': tcp_socket.ret_pose_rpc}
     server = zerorpc.Server(dic)
     try:
-        # ip = f'tcp://{tcp_socket.host}:{tcp_socket.port}'
-        # server.bind(ip)
-        # print(f"zerorpc server is starting at {ip}")        
+        ip = f'tcp://{tcp_socket.host}:{tcp_socket.port}'
+        server.bind(ip)
+        print(f"zerorpc server is starting at {ip}")        
         # create two threads to run the server and move the arm
         t2 = threading.Thread(target=tcp_socket.move_arm).start()
         # t1 = threading.Thread(target=server.run()).start()
-        t1 = threading.Thread(target=tcp_socket.srv_sock).start()
+        t1 = threading.Thread(target=server.run()).start()
         executor.spin()
     finally:
         server.close()
