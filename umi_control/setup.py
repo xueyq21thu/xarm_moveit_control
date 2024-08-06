@@ -21,7 +21,6 @@ setup(
     entry_points={
         'console_scripts': [
             'gripper = umi_control.gripper:main',
-            'tcp_plan = umi_control.tcp_socket_plan:main',
             'tcp_move = umi_control.tcp_socket_move:main',
         ],
     },
