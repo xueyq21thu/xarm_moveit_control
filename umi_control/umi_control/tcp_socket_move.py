@@ -164,17 +164,17 @@ class TcpSocket(Node):
                 xarm_pose_request.pose = pose.tolist()
                 future = self.pose_move_cli.call_async(xarm_pose_request)
                 rclpy.spin_until_future_complete(self, future)
-                
-                if future.result().ret == 0:
-                    print("Pose Planned!")
+                                
+                # if future.result().ret == 0:
+                #     print("Pose Planned!")
                 
                 # get the current pose
                 future = self.get_pose.call_async(GetFloat32List.Request())
                 rclpy.spin_until_future_complete(self, future)
-                self.position = future.result().data
-                self.position = self.position.tolist()
+                self.position = np.array(future.result().datas)
+                # self.position = self.position.tolist()
                 rvec = stf.Rotation.from_euler('xyz', self.position[3:6], degrees=False).as_rotvec()
-                self.position[3:6] = rvec.tolist()
+                # self.position[3:6] = rvec.tolist()
 
             else:
                 pass
