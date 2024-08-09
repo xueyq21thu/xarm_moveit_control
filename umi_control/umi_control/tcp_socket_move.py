@@ -7,6 +7,7 @@ import numpy as np
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+import scipy.spatial.transform as stf
 
 class TcpSocket(Node):
     
@@ -63,23 +64,6 @@ class TcpSocket(Node):
         
         print(f"Receiving from {addr}.")
         
-        # # Set state
-        # # state = 0 is normal state, 5 is stop state
-        # state = SetInt16.Request()
-        # state.data = 0
-        # future = self.set_state_cli.call_async(state)
-        # rclpy.spin_until_future_complete(self, future)        
-        # print("State set success!")
-        
-        # # once xarm has error or warning, it will stop working
-        # # to clear error or warning, call clean_warn or clean_error
-        # call = Call.Request()
-        # future = self.error_cli.call_async(call)
-        # rclpy.spin_until_future_complete(self, future)
-        # future = self.warn_cli.call_async(call)
-        # rclpy.spin_until_future_complete(self, future)
-        # print("Error cleared!")
-        
         # once ctrl+c is pressed, close the connection
         try:
             while cli:
@@ -98,14 +82,14 @@ class TcpSocket(Node):
                 else: 
                     # calculate the relative pose
                     print("Data received: ", data)
-                    # pose = data_selected
-                    pose = self.init_pose + data - self.init_data
+                    pose = data
+                    
+                    rpy = stf.Rotation.from_rotvec(data[3:6]).as_euler('xyz', degrees=False)
                     
                     # set the absolute angle
-                    pose[3:6] = data[3:6]
+                    pose[3:6] = rpy
                     
                     # append the pose to the buffer
-                    # self.cmd.append(pose)
                     self.cmd = pose
         finally:      
             cli.close()
@@ -120,14 +104,19 @@ class TcpSocket(Node):
         future = self.warn_cli.call_async(call)
         rclpy.spin_until_future_complete(self, future)
         print("Error cleared!")
-        print("Initiating pose...")
-        
+
         # get initial pose
+        print("Initiating pose...")
         Getpose = GetFloat32List.Request()
         future = self.get_pose.call_async(Getpose)
         rclpy.spin_until_future_complete(self, future)
         self.init_pose = future.result().datas
         self.init_pose = np.array(self.init_pose)
+        
+        # init return pose
+        self.position = self.init_pose
+        rvec = stf.Rotation.from_euler('xyz', self.init_pose[3:6], degrees=False).as_rotvec()
+        self.position[3:6] = rvec
           
         print("Init pose: ", self.init_pose)
               
@@ -178,44 +167,37 @@ class TcpSocket(Node):
                 
                 if future.result().ret == 0:
                     print("Pose Planned!")
-
+                
+                # get the current pose
+                future = self.get_pose.call_async(GetFloat32List.Request())
+                rclpy.spin_until_future_complete(self, future)
+                self.position = future.result().data
+                self.position = self.position.tolist()
+                rvec = stf.Rotation.from_euler('xyz', self.position[3:6], degrees=False).as_rotvec()
+                self.position[3:6] = rvec.tolist()
 
             else:
                 pass
             
     def ret_pose_rpc(self):
-        return self.position
-        # return pose.tolist()
+        print(f"ret:{self.position}")
+        return self.position.tolist()
     
     def set_pose_rpc(self,msg):
-        print(msg)
+        print(f'Data Recv: {msg}')
         data = np.array(msg)
         if self.init_data_received == False:
             self.init_data = data
             self.init_data_received = True
         
-        pose = self.init_pose - self.init_data + data
-        pose[3:6] = data[3:6]
+        pose = data
+        # rpy = stf.Rotation.from_rotvec(data[3:6]).to_euler('xyz', degrees=False)
+        rpy = stf.Rotation.from_rotvec(data[3:6]).as_euler('xyz', degrees=False)
+        pose[3:6] = rpy
+        
         self.cmd = pose
         
-        # # set the speed, acceleration and move time
-        # xarm_pose_request = MoveCartesian.Request()
-        # xarm_pose_request.speed = self.speed
-        # xarm_pose_request.acc = self.acc
-        # xarm_pose_request.mvtime = self.mvtime
-        # xarm_pose_request.pose = pose.tolist()
-        # future = self.pose_move_cli.call_async(xarm_pose_request)
-        # rclpy.spin_until_future_complete(self, future)
-        # if future.result().ret == 0:
-        #     print("Pose Planned!")
-        
-        # now_pose = GetFloat32List.Request()
-        # future = self.get_pose.call_async(now_pose)
-        # # rclpy.spin_until_future_complete(self,future)
-        # ret = future.result().datas
-        
-        # return ret.tolist()
-        return pose.tolist()
+        return self.position.tolist()
         
 
 def main():
@@ -237,7 +219,6 @@ def main():
         # create two threads to run the server and move the arm
         t2 = threading.Thread(target=tcp_socket.move_arm).start()
         t1 = threading.Thread(target=server.run()).start()
-        # t1 = threading.Thread(target=tcp_socket.srv_sock).start()
         executor.spin()
     finally:
         server.close()
