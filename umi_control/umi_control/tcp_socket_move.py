@@ -1,5 +1,4 @@
 import socket
-from xarm_msgs.srv import GetFloat32List, Call, MoveCartesian, SetTcpLoad, SetInt16, MoveJoint
 import json
 import threading
 import rclpy, zerorpc
@@ -7,6 +6,8 @@ import numpy as np
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from xarm_msgs.srv import GetFloat32List, Call, MoveCartesian, SetTcpLoad, SetInt16, MoveJoint
+from xarm_msgs.msg import RobotMsg
 import scipy.spatial.transform as stf
 
 class TcpSocket(Node):
@@ -15,7 +16,10 @@ class TcpSocket(Node):
         super().__init__("tcp_socket_srv")
         # command buffer to store the received data
         self.cmd = np.array([])
-        self.position = []
+        self.position = np.array([])
+        
+        # robot state
+        self.robot_state = self.create_subscription(RobotMsg,'/xarm/robot_states',callback=self.state_callback, qos_profile=10)
         
         # create client to get current pose
         self.joint_move_cli = self.create_client(MoveJoint,'xarm/set_servo_angle')
@@ -49,6 +53,11 @@ class TcpSocket(Node):
         self.init_p = config['init_p']
         
         print(f"xArm Initiated! Move Speed: {self.speed}, Move Acceleration: {self.acc}, Move Time: {self.mvtime}")
+
+    def state_callback(self,msg):
+        self.position = np.array(msg.pose)
+        rvec = stf.Rotation.from_euler('xyz', self.position[3:6], degrees=False).as_rotvec()
+        self.position[3:6] = rvec
 
 
     def srv_sock(self):
@@ -110,6 +119,7 @@ class TcpSocket(Node):
         Getpose = GetFloat32List.Request()
         future = self.get_pose.call_async(Getpose)
         rclpy.spin_until_future_complete(self, future)
+        
         self.init_pose = future.result().datas
         self.init_pose = np.array(self.init_pose)
         
@@ -164,26 +174,15 @@ class TcpSocket(Node):
                 xarm_pose_request.pose = pose.tolist()
                 future = self.pose_move_cli.call_async(xarm_pose_request)
                 rclpy.spin_until_future_complete(self, future)
-                                
-                # if future.result().ret == 0:
-                #     print("Pose Planned!")
-                
-                # get the current pose
-                future = self.get_pose.call_async(GetFloat32List.Request())
-                rclpy.spin_until_future_complete(self, future)
-                self.position = np.array(future.result().datas)
-                # self.position = self.position.tolist()
-                rvec = stf.Rotation.from_euler('xyz', self.position[3:6], degrees=False).as_rotvec()
-                # self.position[3:6] = rvec.tolist()
 
             else:
                 pass
             
-    def ret_pose_rpc(self):
+    def ret_pose_rpc(self): # check
         print(f"ret:{self.position}")
         return self.position.tolist()
     
-    def set_pose_rpc(self,msg):
+    def set_pose_rpc(self,msg): # command
         print(f'Data Recv: {msg}')
         data = np.array(msg)
         if self.init_data_received == False:
@@ -219,7 +218,7 @@ def main():
         # create two threads to run the server and move the arm
         t2 = threading.Thread(target=tcp_socket.move_arm).start()
         t1 = threading.Thread(target=server.run()).start()
-        executor.spin()
+        # executor.spin()
     finally:
         server.close()
         rclpy.shutdown()
