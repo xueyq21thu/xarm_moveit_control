@@ -7,7 +7,7 @@ ufactory_driver:
       joint_names: ['drive_joint', 'left_finger_joint', 'left_inner_knuckle_joint', 'right_outer_knuckle_joint', 'right_finger_joint', 'right_inner_knuckle_joint']
       speed: 2000
       max_pos: 850
-      frequency: 100
+      frequency: 125
       threshold: 3
       threshold_times: 10
     services:
@@ -137,9 +137,11 @@ ufactory_driver:
       iden_tcp_load: false
       ft_sensor_iden_load: true
       ft_sensor_cali_load: true
-      config_force_control: false
+      config_force_control: true
       set_impedance: false
       set_impedance_mbk: false
       set_impedance_config: false
       set_linear_track_back_origin: false
       set_linear_track_pos: false
+
+      set_force_control_pid: true # it was lost in the formal version

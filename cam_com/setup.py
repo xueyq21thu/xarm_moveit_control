@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'force_control'
+package_name = 'cam_com'
 
 setup(
     name=package_name,
@@ -14,14 +14,13 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='robot1',
-    maintainer_email='596081082@qq.com',
+    maintainer_email='xueyq21@mails.tsinghua.edu.cn',
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "init = force_control.ft_init:main",
-            "fc = force_control.force_control:main"
+            'cam = cam_com.cam_sub:main',
         ],
     },
 )
