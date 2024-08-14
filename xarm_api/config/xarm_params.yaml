@@ -134,7 +134,7 @@ ufactory_driver:
       save_record_trajectory: false
       load_trajectory: false
       playback_trajectory: false
-      iden_tcp_load: false
+      iden_tcp_load: true
       ft_sensor_iden_load: true
       ft_sensor_cali_load: true
       config_force_control: true
@@ -144,4 +144,4 @@ ufactory_driver:
       set_linear_track_back_origin: false
       set_linear_track_pos: false
 
-      set_force_control_pid: true # it was lost in the formal version
+      set_force_control_pid: true # which was lost in the formal version

@@ -1,6 +1,6 @@
 {
     "mode": true,
-    "offset": true,
+    "offset": false,
     "coord": 1,
     "c_axis": [1, 1, 1, 0, 0, 0],
     "ref": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0 ],

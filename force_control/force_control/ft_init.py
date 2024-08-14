@@ -54,8 +54,8 @@ class ForceSensor(Node):
             print("Load Identified!")
         else:
             print("Load Identification Failed!")
-            return False
-        return True
+            # return False
+        return error
     
     def get_data(self):
         # get force sensor data
@@ -80,7 +80,7 @@ def main():
     rclpy.init()
     force_sensor = ForceSensor()
     force_sensor.init_ft()
-    # force_sensor.identify_load()
+    force_sensor.identify_load()
     data = force_sensor.get_data().tolist()
     print(data)
     force_sensor.close_fk()
