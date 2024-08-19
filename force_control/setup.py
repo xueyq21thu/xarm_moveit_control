@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "init = force_control.ft_init:main",
+            "ft_vis = force_control.ft_vis:main",
             "fc = force_control.force_control:main"
         ],
     },

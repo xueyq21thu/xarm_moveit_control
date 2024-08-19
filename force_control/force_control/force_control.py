@@ -206,7 +206,7 @@ class ForceControl(Node):
       rclpy.spin_until_future_complete(self,z)
       time.sleep(0.1)
       print("Force Sensor Zeroed!")
-      
+    
     if c.result() is not None:
       print("Force Sensor Enabled!")
     else:
@@ -221,36 +221,12 @@ def main():
     fc.init_fc()
   else:
     fc.init_impedance()
-  # fc.init_impedance()
   try:
     fc.start_fc()
     rclpy.spin(fc)
   finally:
     fc.end_fc()
     rclpy.shutdown()
-  
-  # flag = 0 means no operation
-  # fc_flag = 0
-  # while True:
-  #   if keyboard.is_pressed('s'):
-  #     fc_flag = 1
-  #     print("Force Control Start!")
-  #   elif keyboard.is_pressed('e'):
-  #     fc_flag = 2
-  #     print("Force Control End!")
-  #   elif keyboard.is_pressed('i'):
-  #     fc_flag = 3
-  #     print("Force Control Params Updated!")
-  #   elif keyboard.is_pressed('q'):
-  #     break
-  #   else:
-  #     fc_flag = 0
-  #   if fc_flag == 1:
-  #     fc.start_fc()
-  #   elif fc_flag == 2:
-  #     fc.end_fc()
-  #   elif fc_flag == 3:
-  #     fc.init_fc()
 
 if __name__ == "__main__":
     main()
