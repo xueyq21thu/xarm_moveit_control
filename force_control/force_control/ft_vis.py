@@ -20,20 +20,19 @@ def g_compensation(pose):
     # gravity compensation
     xyz = pose[:3]
     rpy = pose[3:]
-    T = pose_to_trans(pose)
-    R = T[:3,:3]
+    R = euler_to_rot(rpy)
     
     # gravity vector in ee coordinate
     gc = np.array(gravity) / 1000 # center of mass in ee coordinate, in m
     gc = np.dot(R, gc) # gravity vector in base coordinate
     g_force = np.array([0, 0, -mass*9.8]) # gravity force in base coordinate
     
-    # force in ee coordinate
+    # force in ee coordinate, R.T is the inverse of R
     f = np.dot(R.T, g_force)
     
     # torque in ee coordinate
     t = np.cross(gc, f)
-    return f, t   
+    return f, t
 
 def euler_to_rvec(rpy):
     # convert euler angles to rotation vector
@@ -84,7 +83,6 @@ def inverse_cross_product(force, torque):
     dist = - np.dot(np.linalg.pinv(f_mat), torque)
     return dist
 
-
 def torque_to_dist(ft_data):
     # convert torque to force with displacement
     ft_data = np.array(ft_data)
@@ -94,7 +92,7 @@ def torque_to_dist(ft_data):
     dist = np.zeros(3)
     dist = inverse_cross_product(force, torque)
     
-    return dist
+    return dist * 1000 # convert to mm
     
     # distance in mm
     # return np.array([dx, dy, dz])
@@ -113,7 +111,6 @@ class ForceSensor(Node):
         self.get_data_cli = self.create_client(GetFloat32List,'/xarm/get_ft_sensor_data', callback_group=MutuallyExclusiveCallbackGroup())
         
         self.get_pose_cli = self.create_client(GetFloat32List,'/xarm/get_position')
-
  
     def init_ft(self,offset = False):
         # initialize force sensor
@@ -128,6 +125,11 @@ class ForceSensor(Node):
             c = self.set_zero_cli.call_async(req)
             rclpy.spin_until_future_complete(self, c)
             print("Force Sensor Zeroed!")
+        
+        self.init_pose = self.get_pose()
+        f,t = g_compensation(self.init_pose)
+        self.offset = np.concatenate((f,t))
+        print(f"Offset: {self.offset}")
         
         if c.result() is not None:
             print("Force Sensor Enabled!")
@@ -190,7 +192,6 @@ def main():
         # get force sensor data
         data = force_sensor.get_data()
         data = np.array(data)
-        # print(data)
         
         # get pose from xarm
         pose = force_sensor.get_pose()
@@ -198,17 +199,21 @@ def main():
         xyz = pose[:3]
         rpy = pose[3:]
         
-        
         # gravity compensation of the gripper
         fg, tg = g_compensation(pose)
         data = data - np.concatenate((fg, tg))
-        # print(data)
-        # data = data - load
-        print(data)
-        # print(np.linalg.norm(data))
+        data = data + force_sensor.offset
+        
+        # filter the noise
+        if np.linalg.norm(data[:3]) < 1:
+            data = np.zeros(6)
+            
         
         # convert torque to force with displacement
         dist = torque_to_dist(data)
+        # filter the noise
+        if np.linalg.norm(dist) < 50:
+            dist = np.zeros(3)
         
         # force vec in end effector coordinate
         T1 = np.eye(4)
@@ -220,22 +225,17 @@ def main():
         # get transformation matrix from base to end effector
         T = np.dot(T0, T1)
         origin = T[:3,3]
-        end = np.dot(T, np.array([data[0], data[1], data[2], 1]))
+        end = np.dot(T, np.array([data[0], data[1], data[2], 0]))
         end = end[:3]
         
         # plot force sensor data
-        
-        # ax.quiver(xyz[0], xyz[1], xyz[2], d[0], d[1], d[2])
         # force = T0[:3,:3].dot(data[:3])
         # torque = T0[:3,:3].dot(data[3:])
-        d = T0[:3,:3].dot(np.array([0,0,81]))
-        
-        # ax.quiver(0,0,0, force[0], force[1], force[2], color='r', length=100)
-        # ax.quiver(0,0,0, torque[0], torque[1], torque[2], color='g', length=100)
-        ax.quiver(0,0,0, d[0], d[1], d[2], color='b', length=10)
-        
+        d = T0[:3,:3].dot(np.array([0,0,220]))
+        # plot gripper pose
+        ax.quiver(pose[0], pose[1], pose[2], d[0], d[1], d[2], color='b')
         # plot force vector
-        ax.quiver(origin[0], origin[1], origin[2], end[0], end[1], end[2], color='r')
+        ax.quiver(origin[0], origin[1], origin[2], end[0], end[1], end[2], color='r',length=100)
         
         # limit the axes and legend
         ax.set_xlim(-1000, 1000)

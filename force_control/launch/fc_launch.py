@@ -11,10 +11,16 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
+import json
 
+path = "/home/robot1/xyq_ws/src/xarm-ros2/force_control/config.json"
+with open(path, 'r') as f:
+    config = json.load(f)
+robotip = config['robot_ip']
 
 def generate_launch_description():
-    robot_ip = LaunchConfiguration('robot_ip')
+    robot_ip = LaunchConfiguration('robot_ip', default=robotip)
     report_type = LaunchConfiguration('report_type', default='normal')
     prefix = LaunchConfiguration('prefix', default='')
     hw_ns = LaunchConfiguration('hw_ns', default='xarm')
@@ -41,7 +47,7 @@ def generate_launch_description():
     geometry_mesh_tcp_rpy = LaunchConfiguration('geometry_mesh_tcp_rpy', default='"0 0 0"')
 
     baud_checkset = LaunchConfiguration('baud_checkset', default=True)
-    default_gripper_baud = LaunchConfiguration('default_gripper_baud', default=2000000)
+    default_gripper_baud = LaunchConfiguration('default_gripper_baud', default=115200)
 
     dof = 7
     robot_type = 'xarm'
@@ -62,7 +68,10 @@ def generate_launch_description():
             'add_vacuum_gripper': add_vacuum_gripper,
             'dof': str(dof),
             'robot_type': robot_type,
-            'no_gui_ctrl': 'true',
+            
+            # rviz2 GUI control
+            'no_gui_ctrl': 'false',
+            
             'add_realsense_d435i': add_realsense_d435i,
             'model1300': model1300,
             'add_other_geometry': add_other_geometry,
@@ -114,7 +123,17 @@ def generate_launch_description():
         }.items(),
     )
     
+    # gripper control service run
+    # xarm_moveit_control/xarm_moveit_control/gripper_control_service.py
+    gripper =  Node(
+        package='xarm_moveit_control',
+        executable='gripper_control_service.py',
+        name='gripper_control_service',
+        output='screen',
+        remappings=[('/gripper_control_service', '/gripper_control_service')]
+    )
     return LaunchDescription([
         robot_moveit_realmove_launch,
-        robot_planner_node_launch
+        robot_planner_node_launch,
+        gripper
     ])
