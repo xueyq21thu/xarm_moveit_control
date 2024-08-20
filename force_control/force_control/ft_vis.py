@@ -14,7 +14,6 @@ with open(path, 'r') as f:
     offset = config['offset']
     mass = config['mass']
     gravity = config['gravity']
-    load = config['load']
 
 def g_compensation(pose):
     # gravity compensation
@@ -97,7 +96,6 @@ def torque_to_dist(ft_data):
     # distance in mm
     # return np.array([dx, dy, dz])
 
-
 class ForceSensor(Node):
     
     def __init__(self) -> None:
@@ -112,7 +110,7 @@ class ForceSensor(Node):
         
         self.get_pose_cli = self.create_client(GetFloat32List,'/xarm/get_position')
  
-    def init_ft(self,offset = False):
+    def init_ft(self,offset = True):
         # initialize force sensor
         request = SetInt16.Request()
         request.data = 1
@@ -157,7 +155,6 @@ class ForceSensor(Node):
         data = self.get_data_cli.call_async(GetFloat32List.Request())
         rclpy.spin_until_future_complete(self, data)
         data = data.result().datas
-        # print(data)
         return data
     
     def get_pose(self):
@@ -167,7 +164,7 @@ class ForceSensor(Node):
         pose = pose.result().datas
         return pose
         
-    def close_fk(self):
+    def close_ft(self):
         # close force sensor
         request = SetInt16.Request()
         request.data = 0
@@ -182,7 +179,7 @@ class ForceSensor(Node):
 def main():
     rclpy.init()
     force_sensor = ForceSensor()
-    force_sensor.init_ft()
+    force_sensor.init_ft(offset)
     
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -192,6 +189,7 @@ def main():
         # get force sensor data
         data = force_sensor.get_data()
         data = np.array(data)
+        print(data)
         
         # get pose from xarm
         pose = force_sensor.get_pose()
@@ -246,9 +244,9 @@ def main():
         ax.set_zlabel('Z')
         
     
-    ani = FuncAnimation(fig, update, interval=200)
+    ani = FuncAnimation(fig, update, interval=50)
     plt.show()
-    force_sensor.close_fk()
+    force_sensor.close_ft()
     rclpy.shutdown()
     
 if __name__ == "__main__":
