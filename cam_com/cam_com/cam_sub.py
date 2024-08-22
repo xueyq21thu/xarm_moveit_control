@@ -10,9 +10,9 @@ import open3d as o3d
 class SubCam(Node):
     def __init__(self) -> None:
         super().__init__("sub_cam")
-        # self.rgb_sub = self.create_subscription(Image, '/camera/color/image_raw', self.rgb_callback, 10)
+        self.rgb_sub = self.create_subscription(Image, '/camera/color/image_raw', self.rgb_callback, 10)
         # self.dpt_sub = self.create_subscription(PointCloud2, '/camera/depth/points',self.dpt_callback, 10)
-        self.dep_rgb_sub = self.create_subscription(PointCloud2, '/camera/depth_registered/points',self.dpt_rgb_callback, 10)
+        # self.dep_rgb_sub = self.create_subscription(PointCloud2, '/camera/depth_registered/points',self.dpt_rgb_callback, 10)
         self.frame_num = 0
         self.frame = []
         

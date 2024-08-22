@@ -101,3 +101,8 @@ Gripper contact point:
 $$
 (0.0, 0.0, 200.0)
 $$
+
+## Interface
+
+- Gripper init distance problem. (GUI or not)
+- Gripper force control.

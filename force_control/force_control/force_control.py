@@ -179,6 +179,7 @@ with open(path, 'r') as f:
   config = json.load(f)
   mass = config['mass']
   gravity = config['gravity']
+  gsp_force = config['force_percent']
 
 class ForceControl(Node):
   
@@ -234,14 +235,15 @@ class ForceControl(Node):
       if not self.mode:
         self.mode = True
         self.start_move()
+        print("Force PID switched!")
         
     # if mode is impedance, switch to force control
     if not mode:
       if self.mode:
         self.mode = False
         self.start_move()
+        print("Impedance switched!")
         
-    print("Mode switched!")
 
   def init_gripper(self):
     set_modbus_timeout_request = SetModbusTimeout.Request()
@@ -249,20 +251,26 @@ class ForceControl(Node):
 
     timeout_set = self.set_modbus_timeout_cli.call_async(set_modbus_timeout_request)
     rclpy.spin_until_future_complete(self, timeout_set)
-    print("Timeout: {}".format(2000))
 
     set_baudrate_request = SetInt32.Request()
     set_baudrate_request.data = 115200
     baudrate_set = self.set_baudrate_cli.call_async(set_baudrate_request)
     rclpy.spin_until_future_complete(self, baudrate_set)
-    print("Baudrate: {}".format(115200))
     
     init_req = GetSetModbusData.Request()
     init_req.modbus_data = [1, 6, 1, 0, 0, 1, 73, 246]
     init_grp = self.get_set_modbus_data_cli.call_async(init_req)
     rclpy.spin_until_future_complete(self, init_grp)
-    print("Gripper initialized!")
     
+    # set force value in percentage, valid in code[4] and code[5], range: 20-100
+    force_set = GetSetModbusData.Request()
+    fp = gsp_force
+    force_set.modbus_data = [1, 6, 1, 1, 0, fp, 0x59, 0xfe]
+    future = self.get_set_modbus_data_cli.call_async(force_set)
+    rclpy.spin_until_future_complete(self, future)
+    print("Force set!{}".format(gsp_force))
+    
+              
   def close_gripper(self):
     if self.gripper_status:
       return
@@ -305,7 +313,7 @@ class ForceControl(Node):
     rclpy.spin_until_future_complete(self, future)
     future = self.warn_cli.call_async(call)
     rclpy.spin_until_future_complete(self, future)
-    # print("Error cleared!")
+    print("Error cleared!")
     
     # Set PID of motion
     pid = FtForcePid.Request()
@@ -456,10 +464,14 @@ class ForceControl(Node):
 
 def main():
   rclpy.init()
+  print(-1)
   fc = ForceControl()
   fc.init_fc()
+  print(0)
   fc.init_gripper()
+  print(1)
   fc.init_impedance()
+  print(2)
   try:
     fc.start_move()
     while rclpy.ok():
@@ -478,12 +490,14 @@ def main():
       if not fc.gripper_status:
         if force[2] < -10:
           fc.close_gripper()
+          time.sleep(0.5)
           fc.reset_mode(False)
       
       # impedance control
       if fc.gripper_status:
         if force[2] > 20:
           fc.open_gripper()
+          time.sleep(0.5)
           fc.reset_mode(True)
              
   finally:

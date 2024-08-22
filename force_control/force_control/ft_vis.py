@@ -11,7 +11,6 @@ import scipy.spatial.transform as stf
 path = "/home/robot1/xyq_ws/src/xarm-ros2/force_control/config.json"
 with open(path, 'r') as f:
     config = json.load(f)
-    offset = config['offset']
     mass = config['mass']
     gravity = config['gravity']
 
@@ -179,7 +178,7 @@ class ForceSensor(Node):
 def main():
     rclpy.init()
     force_sensor = ForceSensor()
-    force_sensor.init_ft(offset)
+    force_sensor.init_ft()
     
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
