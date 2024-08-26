@@ -2,15 +2,7 @@ import scipy.spatial.transform as stf
 import numpy as np
 import json
 
-
-path = "/home/robot1/xyq_ws/src/xarm-ros2/force_control/config.json"
-with open(path, 'r') as f:
-    config = json.load(f)
-    offset = config['offset']
-    mass = config['mass']
-    gravity = config['gravity']
-
-def g_compensation(pose):
+def g_compensation(pose, gravity, mass):
     # gravity compensation
     xyz = pose[:3]
     rpy = pose[3:]
@@ -29,9 +21,6 @@ def g_compensation(pose):
     t = np.cross(gc, f)
     return f, t
     
-    
-    
-
 def euler_to_rvec(rpy):
     # convert euler angles to rotation vector
     rvec = np.zeros(3)
@@ -82,3 +71,10 @@ def torque_to_dist(ft_data):
     
     # distance in mm
     return np.array([dx, dy, dz])
+
+def rot_to_euler(R):
+    # convert rotation matrix to euler angles
+    r = np.arctan2(R[2,1], R[2,2])
+    p = np.arctan2(-R[2,0], np.sqrt(R[2,1]**2 + R[2,2]**2))
+    y = np.arctan2(R[1,0], R[0,0])
+    return np.array([r, p, y])

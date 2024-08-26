@@ -1,3 +1,4 @@
+import asyncio
 import numpy as np
 import json, rclpy, time
 from rclpy.node import Node
@@ -218,7 +219,7 @@ class ForceControl(Node):
     # service client
     self.update_ref_srv = self.create_service(SetFloat32List, 'update_force_ref', self.update_ref_callback)
     
-    self.mode = True # True: force control, False: impedance
+    self.mode = 0 # 0: init, 1: force control, 2: impedance, -1: stop
     self.gripper_status = False # False: open, True: close
     
   def update_ref_callback(self, request, response):
@@ -411,8 +412,7 @@ class ForceControl(Node):
     self.B = config['B']
     self.coord = config["coord"]
     self.c_axis = config["c_axis"]
-    print("Params Configured!")
-    
+        
     impe = FtImpedance.Request()
     impe.coord = self.coord
     impe.c_axis = self.c_axis
@@ -429,10 +429,6 @@ class ForceControl(Node):
     c = self.enable_ft_cli.call_async(req)
     rclpy.spin_until_future_complete(self,c)
     
-    if c.result() is not None:
-      print("Force Sensor Enabled!")
-    else:
-      print("Force Sensor Enable Failed!")
     
   def update_ref(self, ref):
     '''
@@ -464,14 +460,10 @@ class ForceControl(Node):
 
 def main():
   rclpy.init()
-  print(-1)
   fc = ForceControl()
   fc.init_fc()
-  print(0)
   fc.init_gripper()
-  print(1)
   fc.init_impedance()
-  print(2)
   try:
     fc.start_move()
     while rclpy.ok():
@@ -484,6 +476,8 @@ def main():
       fg, tg = g_compensation(pose)
       force = force - np.concatenate((fg, tg))
       force = force + fc.offset
+      
+      # finate state machine
       
       # mode switch by the force condition
       # force control

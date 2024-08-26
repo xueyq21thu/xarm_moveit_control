@@ -4,6 +4,7 @@ import tf2_ros
 from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float32MultiArray
 import numpy as np
+from sensor_msgs.msg import PointCloud2
 import tf_transformations
 
 class TfPublisher(Node):
@@ -18,12 +19,21 @@ class TfPublisher(Node):
         self.publisher = self.create_publisher(Float32MultiArray, 'tf_parameters', 10)
         
         # 定时器，用于定期获取和发布变换
-        self.timer_period = 0.1  # 秒
+        self.timer_period = 1  # 秒
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
         
         # 定义坐标系名称
         self.source_frame = 'link_base'
         self.target_frame = 'camera_depth_optical_frame'
+        
+        # sub&pub depth image
+        self.dep_rgb_sub = self.create_subscription(PointCloud2, '/camera/depth_registered/points',self.dpt_rgb_callback, 10)
+        self.frame_pub = self.create_publisher(PointCloud2, 'rgbd_cloud', 10)
+        self.frame = PointCloud2()
+        
+        
+    def dpt_rgb_callback(self, msg):
+        self.frame = msg
         
     def timer_callback(self):
         try:
@@ -51,7 +61,7 @@ class TfPublisher(Node):
         # 发布消息
         self.publisher.publish(msg)
         # self.get_logger().info(f'Published TF parameters: {msg.data}')
-        
+        self.frame_pub.publish(self.frame)
 
 def main(args=None):
     rclpy.init(args=args)

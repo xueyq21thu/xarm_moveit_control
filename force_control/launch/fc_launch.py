@@ -129,11 +129,34 @@ def generate_launch_description():
         package='xarm_moveit_control',
         executable='gripper_control_service.py',
         name='gripper_control_service',
-        output='screen',
-        remappings=[('/gripper_control_service', '/gripper_control_service')]
+        output='screen'
     )
+    
+    # com_interface service run
+    # xarm_ros2/com_interface/com_interface/com_interface_srv.py
+    com_interface = Node(
+        package='com_interface',
+        executable='com_interface_srv.py',
+        name='com_interface_srv',
+        output='screen'
+    )
+    
+    # tf_publisher run
+    # xarm_ros2/tf_publisher/tf_publisher/tf_publisher.py
+    tf_publisher = Node(
+        package='tf_publisher',
+        executable='tf_publisher.py',
+        name='tf_publisher',
+        output='screen'
+    )
+    
+    
+    
+    
     return LaunchDescription([
         robot_moveit_realmove_launch,
         robot_planner_node_launch,
-        gripper
+        gripper,
+        com_interface,
+        tf_publisher
     ])

@@ -63,23 +63,6 @@ class TcpSocket(Node):
         
         print(f"Receiving from {addr}.")
         
-        # # Set state
-        # # state = 0 is normal state, 5 is stop state
-        # state = SetInt16.Request()
-        # state.data = 0
-        # future = self.set_state_cli.call_async(state)
-        # rclpy.spin_until_future_complete(self, future)        
-        # print("State set success!")
-        
-        # # once xarm has error or warning, it will stop working
-        # # to clear error or warning, call clean_warn or clean_error
-        # call = Call.Request()
-        # future = self.error_cli.call_async(call)
-        # rclpy.spin_until_future_complete(self, future)
-        # future = self.warn_cli.call_async(call)
-        # rclpy.spin_until_future_complete(self, future)
-        # print("Error cleared!")
-        
         # once ctrl+c is pressed, close the connection
         try:
             while cli:
@@ -105,7 +88,6 @@ class TcpSocket(Node):
                     pose[3:6] = data[3:6]
                     
                     # append the pose to the buffer
-                    # self.cmd.append(pose)
                     self.cmd = pose
         finally:      
             cli.close()
