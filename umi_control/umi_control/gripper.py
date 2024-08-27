@@ -83,7 +83,7 @@ class GripperSrv(Node):
             config = json.load(f)
         # get parameters from config.json
         self.host = config['host']
-        self.port = config['port']
+        self.port = config['g_port']
         self.max_width = config['g_max']
         
         self.get_gripper_srv_callbackgroup = MutuallyExclusiveCallbackGroup()

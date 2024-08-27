@@ -43,7 +43,7 @@ class TcpSocket(Node):
         self.acc = config['acc']
         self.mvtime = config['mvtime']
         self.host = config['host']
-        self.port = config['port']
+        self.port = config['x_port']
         self.weight = config['weight']
         self.center = config['center']
         
