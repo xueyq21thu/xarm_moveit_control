@@ -2,7 +2,7 @@ import json, rclpy, socket
 import numpy as np
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from xarm_msgs.srv import GetFloat32List, SetInt16, Call, GetInt16
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation

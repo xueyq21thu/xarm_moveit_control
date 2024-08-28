@@ -24,7 +24,8 @@ setup(
     entry_points={
         'console_scripts': [
             "ft_vis = force_control.ft_vis:main",
-            "fc = force_control.force_control:main"
+            "fc = force_control.force_control:main",
+            "ft_pub = force_control.ft_pub:main"
         ],
     },
 )

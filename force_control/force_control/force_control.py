@@ -3,6 +3,7 @@ import numpy as np
 import json, rclpy, time
 from rclpy.node import Node
 from typing import List, Tuple
+from std_msgs.msg import Float32MultiArray
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from xarm_msgs.srv import GetFloat32List, SetInt16, Call, GetInt16, FtForceConfig, SetFloat32List
@@ -200,6 +201,9 @@ class ForceControl(Node):
     self.start_move_srv = self.create_service(Call, 'start_move', self.start_move_callback)
     self.end_move_srv = self.create_service(Call, 'end_move', self.end_move_callback)
     
+    # subscriber for ft data
+    self.ft_data_sub = self.create_subscription(Float32MultiArray, 'ft_values', self.ft_data_callback, 10)
+    
     # force control client
     self.set_fapp_cli = self.create_client(SetInt16,'/xarm/ft_sensor_app_set', callback_group=MutuallyExclusiveCallbackGroup())
     self.set_force_config_cli = self.create_client(FtForceConfig,'/xarm/config_force_control', callback_group=MutuallyExclusiveCallbackGroup())
@@ -223,7 +227,6 @@ class ForceControl(Node):
     # pose client
     self.get_pose_cli = self.create_client(GetFloat32List,'/xarm/get_position')
     self.set_load_cli = self.create_client(SetTcpLoad, '/xarm/set_tcp_load')
-
     
     # clear error and warn
     self.warn_cli = self.create_client(Call,'xarm/clean_warn')
@@ -239,7 +242,7 @@ class ForceControl(Node):
     self.gripper_status = False # False: open, True: close
 
   def finite_state_machine(self):
-    while rclpy.ok():
+    while True:
       # finite state machine
       # calculate the data from force sensor
       if self.fsm == 0: # loop
@@ -248,7 +251,7 @@ class ForceControl(Node):
         fg, tg = g_compensation(p)
         f = f - np.concatenate((fg, tg))
         f = f + self.offset
-        
+
         # finite state machine
         # force control
         if not self.gripper_status:
@@ -266,21 +269,25 @@ class ForceControl(Node):
             
       elif self.fsm == 1: # start
         self.start_move()
-        print(self.fsm)
+        print(1)
         self.fsm = 0
 
       elif self.fsm == 2: # end
         self.end_move()
-        print(self.fsm)
+        print(2)
         self.fsm = -1
         
-      elif self.fsm == 3: # update ref
-        self.update_ref(self.f_ref)
-        print(self.fsm)
-        self.fsm = 0
+      # elif self.fsm == 3: # update ref
+      #   self.update_ref(self.f_ref)
+      #   print(3)
+      #   self.fsm = 0
         
       else: # not start
         pass
+        # print(-1)
+
+      print("test")
+      time.sleep(0.1)
     
     print("Force Control Stopped!")
 
@@ -293,7 +300,7 @@ class ForceControl(Node):
     return response
   
   def start_move_callback(self, request, response):
-    # self.start_move()
+    print("Start!xy ")
     self.fsm = 1
     response.ret = 0
     response.message = "Force control started!"
@@ -301,6 +308,7 @@ class ForceControl(Node):
   
   def end_move_callback(self, request, response):
     # self.end_move()
+    print("end xy")
     self.fsm = 2
     response.ret = 0
     response.message = "Force control ended!"
@@ -510,6 +518,13 @@ class ForceControl(Node):
     rclpy.spin_until_future_complete(self,c)
     print("Impedance Initialized!")
     
+    call = Call.Request()
+    err = self.error_cli.call_async(call)
+    rclpy.spin_until_future_complete(self, err)
+    war = self.warn_cli.call_async(call)
+    rclpy.spin_until_future_complete(self, war)
+    print("Error cleared!")
+    
     # # enable ft sensor
     # req = SetInt16.Request()
     # req.data = 1
@@ -525,18 +540,18 @@ class ForceControl(Node):
     rclpy.spin_until_future_complete(self,z)
     
     # calculate the force on ee
-    f_ref = -1 * np.array(ref[:3]) / 100
+    f_ref = np.array(ref[:3]) / 100
     pose = self.get_pose()
-    # ft = force_to_tcp(f_ref, pose)
-    print("Force reference:", f_ref)
+    ft = force_to_tcp(f_ref, pose)
+    print("Force reference:", ft)
     
     
     # update force reference
     cfg = FtForceConfig.Request()
     cfg.c_axis = self.c_axis
     cfg.coord = self.coord
-    # cfg.ref = ft.tolist()
-    cfg.ref = f_ref.tolist()
+    cfg.ref = ft.tolist()
+    # cfg.ref = f_ref.tolist()
     cfg.limits = self.limits
     c = self.set_force_config_cli.call_async(cfg)
     rclpy.spin_until_future_complete(self,c)

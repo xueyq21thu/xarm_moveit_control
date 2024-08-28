@@ -5,11 +5,11 @@ import time
 import cv2
 
 def rot_to_euler(R):
-    # convert rotation matrix to euler angles
+    # convert rotation matrix to euler angles, only in this shitty hole
     r = np.arctan2(R[2,1], R[2,2])
     p = np.arctan2(-R[2,0], np.sqrt(R[2,1]**2 + R[2,2]**2))
     y = np.arctan2(R[1,0], R[0,0])
-    return np.array([r, p, y])
+    return np.array([p, -r, y])
 
 class ComSrv(Node):
     def __init__(self) -> None:
@@ -59,11 +59,14 @@ class ComSrv(Node):
         # self.cmd_pose = request_data
         # self.xarm_pose_request.pose = self.cmd_pose.tolist()
         
-        R = np.array([request_data[3:6], request_data[6:9], request_data[9:12]]) / 1000
+        R = np.array([-1 * request_data[3:6], request_data[6:9], request_data[9:12]])
+        # R = np.array([-1 * request_data[3:6], request_data[6:9], ])
         print(R)
         rpy = rot_to_euler(R)
+        
         pose = np.concatenate((xyz, rpy))
         self.cmd_pose = pose
+        print(pose)
         self.xarm_pose_request.pose = self.cmd_pose.tolist()
         
         # end the force control
@@ -114,6 +117,6 @@ def main():
     finally:
         com_srv.destroy_node()
         rclpy.shutdown()
-        
+
 if __name__ == '__main__':
     main()        

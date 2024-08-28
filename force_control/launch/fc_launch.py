@@ -194,9 +194,9 @@ def generate_launch_description():
     return LaunchDescription([
         robot_moveit_realmove_launch,
         robot_planner_node_launch,
-        cam,
+        # cam,
         gripper,
-        # com_interface,
+        com_interface,
         tf_publisher,
         # fc
     ])
