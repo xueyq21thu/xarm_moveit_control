@@ -70,7 +70,7 @@ def generate_launch_description():
             'robot_type': robot_type,
             
             # rviz2 GUI control
-            'no_gui_ctrl': 'false',
+            'no_gui_ctrl': 'true',
             
             'add_realsense_d435i': add_realsense_d435i,
             'model1300': model1300,
@@ -123,11 +123,43 @@ def generate_launch_description():
         }.items(),
     )
     
+    cam = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="log",
+        arguments=[
+            "--frame-id",
+            "link_eef",
+            "--child-frame-id",
+            "camera_link",
+            "--x",
+            "-0.067",
+            "--y",
+            "0.041",
+            "--z",
+            "0.095",
+            "--qx",
+            "0.501",
+            "--qy",
+            "-0.510",
+            "--qz",
+            "0.479",
+            "--qw",
+            "0.508",
+            # "--roll",
+            # "2.93443",
+            # "--pitch",
+            # "3.11652",
+            # "--yaw",
+            # "3.10849",
+        ],
+    )
+    
     # gripper control service run
     # xarm_moveit_control/xarm_moveit_control/gripper_control_service.py
     gripper =  Node(
         package='xarm_moveit_control',
-        executable='gripper_control_service.py',
+        executable='gripper_control_service',
         name='gripper_control_service',
         output='screen'
     )
@@ -136,7 +168,7 @@ def generate_launch_description():
     # xarm_ros2/com_interface/com_interface/com_interface_srv.py
     com_interface = Node(
         package='com_interface',
-        executable='com_interface_srv.py',
+        executable='com_srv',
         name='com_interface_srv',
         output='screen'
     )
@@ -145,18 +177,26 @@ def generate_launch_description():
     # xarm_ros2/tf_publisher/tf_publisher/tf_publisher.py
     tf_publisher = Node(
         package='tf_publisher',
-        executable='tf_publisher.py',
+        executable='tf_publisher',
         name='tf_publisher',
         output='screen'
     )
     
-    
-    
+    # force_control run
+    # xarm_ros2/force_control/force_control/force_control.py
+    fc = Node(
+        package='force_control',
+        executable='fc',
+        name='force_control',
+        output='screen',
+    )
     
     return LaunchDescription([
         robot_moveit_realmove_launch,
         robot_planner_node_launch,
+        cam,
         gripper,
-        com_interface,
-        tf_publisher
+        # com_interface,
+        tf_publisher,
+        # fc
     ])

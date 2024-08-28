@@ -19,7 +19,7 @@ class TfPublisher(Node):
         self.publisher = self.create_publisher(Float32MultiArray, 'tf_parameters', 10)
         
         # 定时器，用于定期获取和发布变换
-        self.timer_period = 1  # 秒
+        self.timer_period = 5  # 秒
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
         
         # 定义坐标系名称

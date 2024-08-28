@@ -1,11 +1,12 @@
-import asyncio
+import threading
 import numpy as np
 import json, rclpy, time
 from rclpy.node import Node
 from typing import List, Tuple
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from xarm_msgs.srv import GetFloat32List, SetInt16, Call, GetInt16, FtForceConfig, SetFloat32List
-from xarm_msgs.srv import GetSetModbusData, SetInt32, SetModbusTimeout, FtForcePid, FtImpedance
+from xarm_msgs.srv import GetSetModbusData, SetInt32, SetModbusTimeout, FtForcePid, FtImpedance, SetTcpLoad
 
 
 # gripper helper
@@ -130,7 +131,7 @@ def force_to_tcp(f, pose):
   torque = np.array([0, 0, 0])
   return np.concatenate((force, torque))
   
-def condition(pose, force, ref):
+def condition(pose, force, ref, mode):
   # condition to switch mode
   f = np.array(force[:3])
   f_ref = np.array(ref[:3])
@@ -139,13 +140,20 @@ def condition(pose, force, ref):
   # force in base coordinate
   f_ref = np.dot(R.T, f_ref)
   
+  # force control
   # actual force is higher than normal plain of reference force
-  if np.dot(f, f_ref) > np.dot(f_ref, f_ref):
-    return True
-  elif np.dot(f, f_ref) < -np.dot(f_ref, f_ref):
-    return True
-  else:
-    return False
+  if mode:
+    if np.dot(f, f_ref)< -np.dot(f_ref, f_ref):
+      return True
+    else:
+      return False
+  # impedance control
+  # actual force is lower than opposite normal plain of reference force
+  elif not mode:
+    if np.dot(f, f_ref) > np.dot(f_ref, f_ref):
+      return True
+    else:
+      return False
 
   
 # params config description
@@ -187,6 +195,11 @@ class ForceControl(Node):
   def __init__(self):
     super().__init__('force_control')
     
+    # service for force control
+    self.update_ref_srv = self.create_service(SetFloat32List, 'update_force_ref', self.update_ref_callback)
+    self.start_move_srv = self.create_service(Call, 'start_move', self.start_move_callback)
+    self.end_move_srv = self.create_service(Call, 'end_move', self.end_move_callback)
+    
     # force control client
     self.set_fapp_cli = self.create_client(SetInt16,'/xarm/ft_sensor_app_set', callback_group=MutuallyExclusiveCallbackGroup())
     self.set_force_config_cli = self.create_client(FtForceConfig,'/xarm/config_force_control', callback_group=MutuallyExclusiveCallbackGroup())
@@ -209,25 +222,88 @@ class ForceControl(Node):
     
     # pose client
     self.get_pose_cli = self.create_client(GetFloat32List,'/xarm/get_position')
+    self.set_load_cli = self.create_client(SetTcpLoad, '/xarm/set_tcp_load')
+
     
     # clear error and warn
     self.warn_cli = self.create_client(Call,'xarm/clean_warn')
     self.error_cli = self.create_client(Call,'xarm/clean_error')
     self.set_state = self.create_client(SetInt16,'xarm/set_state')
     self.set_mode = self.create_client(SetInt16,'xarm/set_mode')
-    
-    # service client
-    self.update_ref_srv = self.create_service(SetFloat32List, 'update_force_ref', self.update_ref_callback)
-    
-    self.mode = 0 # 0: init, 1: force control, 2: impedance, -1: stop
+        
+    # params
+    self.fsm = -1 # finite state machine
+    # -1: not start, 0: loop, 1: start, 2: end, 3: update ref
+
+    self.mode = True # True: force control, False: impedance
     self.gripper_status = False # False: open, True: close
+
+  def finite_state_machine(self):
+    while rclpy.ok():
+      # finite state machine
+      # calculate the data from force sensor
+      if self.fsm == 0: # loop
+        f = np.array(self.get_data())
+        p = np.array(self.get_pose())
+        fg, tg = g_compensation(p)
+        f = f - np.concatenate((fg, tg))
+        f = f + self.offset
+        
+        # finite state machine
+        # force control
+        if not self.gripper_status:
+          if condition(p, f, self.f_ref, self.mode):
+            self.close_gripper()
+            time.sleep(0.5)
+            self.reset_mode(False)
+        
+        # impedance control
+        if self.gripper_status:
+          if condition(p, f, self.f_ref, self.mode):
+            self.open_gripper()
+            time.sleep(0.5)
+            self.reset_mode(True)
+            
+      elif self.fsm == 1: # start
+        self.start_move()
+        print(self.fsm)
+        self.fsm = 0
+
+      elif self.fsm == 2: # end
+        self.end_move()
+        print(self.fsm)
+        self.fsm = -1
+        
+      elif self.fsm == 3: # update ref
+        self.update_ref(self.f_ref)
+        print(self.fsm)
+        self.fsm = 0
+        
+      else: # not start
+        pass
     
+    print("Force Control Stopped!")
+
+
   def update_ref_callback(self, request, response):
-    ref = request.datas
-    ref = np.array(ref)
-    self.update_ref(ref)
-    response.ret = True
+    self.f_ref = request.datas
+    self.fsm = 3
+    response.ret = 0
     response.message = "Force reference updated!"
+    return response
+  
+  def start_move_callback(self, request, response):
+    # self.start_move()
+    self.fsm = 1
+    response.ret = 0
+    response.message = "Force control started!"
+    return response
+  
+  def end_move_callback(self, request, response):
+    # self.end_move()
+    self.fsm = 2
+    response.ret = 0
+    response.message = "Force control ended!"
     return response
   
   def reset_mode(self, mode):
@@ -244,8 +320,7 @@ class ForceControl(Node):
         self.mode = False
         self.start_move()
         print("Impedance switched!")
-        
-
+      
   def init_gripper(self):
     set_modbus_timeout_request = SetModbusTimeout.Request()
     set_modbus_timeout_request.timeout = 2000
@@ -270,8 +345,7 @@ class ForceControl(Node):
     future = self.get_set_modbus_data_cli.call_async(force_set)
     rclpy.spin_until_future_complete(self, future)
     print("Force set!{}".format(gsp_force))
-    
-              
+         
   def close_gripper(self):
     if self.gripper_status:
       return
@@ -310,10 +384,10 @@ class ForceControl(Node):
     self.limits = config["limits"]
     
     call = Call.Request()
-    future = self.error_cli.call_async(call)
-    rclpy.spin_until_future_complete(self, future)
-    future = self.warn_cli.call_async(call)
-    rclpy.spin_until_future_complete(self, future)
+    err = self.error_cli.call_async(call)
+    rclpy.spin_until_future_complete(self, err)
+    war = self.warn_cli.call_async(call)
+    rclpy.spin_until_future_complete(self, war)
     print("Error cleared!")
     
     # Set PID of motion
@@ -331,7 +405,9 @@ class ForceControl(Node):
     cfg.limits = self.limits
     
     # Compensate gravity
-    pose = self.get_pose()
+    pose = self.get_pose_cli.call_async(GetFloat32List.Request())
+    rclpy.spin_until_future_complete(self,pose)
+    pose = pose.result().datas
     f_ref = np.array(self.f_ref[:3])
     ft = force_to_tcp(f_ref, pose)
     cfg.ref = ft.tolist()
@@ -350,11 +426,19 @@ class ForceControl(Node):
     z = self.set_zero_cli.call_async(Call.Request())
     rclpy.spin_until_future_complete(self,z)
     time.sleep(0.1)
-      
-    self.init_pose = self.get_pose()
+    
+    ini = self.get_pose_cli.call_async(GetFloat32List.Request())
+    rclpy.spin_until_future_complete(self,ini)
+    self.init_pose = ini.result().datas
     f,t = g_compensation(self.init_pose)
     self.offset = np.concatenate((f,t))
     print("Offset:", self.offset)
+    
+    load_req = SetTcpLoad.Request()
+    load_req.weight = 1.9
+    load_req.center_of_gravity = [0.0, 5.0, 100.0]
+    future = self.set_load_cli.call_async(load_req)
+    rclpy.spin_until_future_complete(self, future)
   
     if c.result() is not None:
       print("Force Sensor Enabled!")
@@ -362,6 +446,12 @@ class ForceControl(Node):
       print("Force Sensor Enable Failed!")
     
   def start_move(self):
+    e = self.error_cli.call_async(Call.Request())
+    # rclpy.spin_until_future_complete(self,e)
+    w = self.warn_cli.call_async(Call.Request())
+    # rclpy.spin_until_future_complete(self,w)
+    
+    
     # enable force control
     app = SetInt16.Request()
     if self.mode:
@@ -370,28 +460,25 @@ class ForceControl(Node):
     else: 
       # impedance control
       app.data = 1
-    future = self.set_fapp_cli.call_async(app)
-    rclpy.spin_until_future_complete(self,future)
+    a = self.set_fapp_cli.call_async(app)
+    rclpy.spin_until_future_complete(self,a)
     
     # it will start after state(0)
     req = SetInt16.Request()
     req.data = 0
-    state = self.set_state.call_async(req)
-    rclpy.spin_until_future_complete(self,state)
+    b = self.set_state.call_async(req)
+    rclpy.spin_until_future_complete(self,b)
+    
+    # start finite state machine
     print("start!")
     
   def end_move(self):
     # disable app
     app = SetInt16.Request()
     app.data = 0
-    c = self.set_fapp_cli.call_async(app)
-    rclpy.spin_until_future_complete(self,c)
+    a = self.set_fapp_cli.call_async(app)
+    # rclpy.spin_until_future_complete(self,a)
     
-    # disable ft sensor
-    req = SetInt16.Request()
-    req.data = 0
-    c = self.enable_ft_cli.call_async(req)
-    rclpy.spin_until_future_complete(self,c)
     print("end!")
 
   def init_impedance(self):
@@ -421,81 +508,76 @@ class ForceControl(Node):
     impe.b = self.B
     c = self.set_impe_cli.call_async(impe)
     rclpy.spin_until_future_complete(self,c)
-    print("Impedance Control")
+    print("Impedance Initialized!")
     
-    # enable ft sensor
-    req = SetInt16.Request()
-    req.data = 1
-    c = self.enable_ft_cli.call_async(req)
-    rclpy.spin_until_future_complete(self,c)
-    
-    
+    # # enable ft sensor
+    # req = SetInt16.Request()
+    # req.data = 1
+    # c = self.enable_ft_cli.call_async(req)
+    # rclpy.spin_until_future_complete(self,c)
+
   def update_ref(self, ref):
     '''
     update force reference
     '''
+    # clear ft offset
+    z = self.set_zero_cli.call_async(Call.Request())
+    rclpy.spin_until_future_complete(self,z)
+    
+    # calculate the force on ee
+    f_ref = -1 * np.array(ref[:3]) / 100
+    pose = self.get_pose()
+    # ft = force_to_tcp(f_ref, pose)
+    print("Force reference:", f_ref)
+    
+    
+    # update force reference
     cfg = FtForceConfig.Request()
     cfg.c_axis = self.c_axis
     cfg.coord = self.coord
-    cfg.ref = ref
+    # cfg.ref = ft.tolist()
+    cfg.ref = f_ref.tolist()
     cfg.limits = self.limits
-    f = self.set_force_config_cli.call_async(cfg)
-    rclpy.spin_until_future_complete(self,f)
+    c = self.set_force_config_cli.call_async(cfg)
+    rclpy.spin_until_future_complete(self,c)
     print("Force reference updated!")
     
   def get_pose(self):
     # get pose from xarm
     pose = self.get_pose_cli.call_async(GetFloat32List.Request())
-    rclpy.spin_until_future_complete(self, pose)
+    rclpy.spin_until_future_complete(self,pose)
     pose = pose.result().datas
     return pose
 
   def get_data(self):
     # get force sensor data
     data = self.get_data_cli.call_async(GetFloat32List.Request())
-    rclpy.spin_until_future_complete(self, data)
+    rclpy.spin_until_future_complete(self,data)
     data = data.result().datas
     return data
 
 
 def main():
   rclpy.init()
+  # configure the force control
   fc = ForceControl()
   fc.init_fc()
   fc.init_gripper()
   fc.init_impedance()
+  print("Force Control Initialized!")
   try:
-    fc.start_move()
-    while rclpy.ok():
-      # calculate the data
-      force = fc.get_data()
-      pose = fc.get_pose()
+    # start MultiThread executor
+    executor = MultiThreadedExecutor(num_threads=4)
+    executor.add_node(fc)
 
-      force = np.array(force)
-      pose = np.array(pose)
-      fg, tg = g_compensation(pose)
-      force = force - np.concatenate((fg, tg))
-      force = force + fc.offset
-      
-      # finate state machine
-      
-      # mode switch by the force condition
-      # force control
-      if not fc.gripper_status:
-        if force[2] < -10:
-          fc.close_gripper()
-          time.sleep(0.5)
-          fc.reset_mode(False)
-      
-      # impedance control
-      if fc.gripper_status:
-        if force[2] > 20:
-          fc.open_gripper()
-          time.sleep(0.5)
-          fc.reset_mode(True)
-             
+    threading.Thread(target=fc.finite_state_machine).start()
+    executor.spin()
+    
+    print("Force Control Running!")
   finally:
+    # end force control
     fc.end_move()
+    
     rclpy.shutdown()
 
 if __name__ == "__main__":
