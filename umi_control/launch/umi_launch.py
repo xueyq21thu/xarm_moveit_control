@@ -14,13 +14,16 @@ from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
 import os, json
 
-path = '/home/robot1/umi/src/xarmmoveitcontrol-humble/umi_control/umi_control/config.json'
-with open(path, 'r') as f:
-    config = json.load(f)
-    robot_ip = config['robot_ip']
+# path = '/home/robot1/umi/src/xarmmoveitcontrol-humble/umi_control/umi_control/config.json'
+
+# robot_ip =  "192.168.1.234"
+
+# with open(path, 'r') as f:
+#     config = json.load(f)
+
 
 def generate_launch_description():
-    robot_ip = LaunchConfiguration('robot_ip', default=robot_ip)
+    robot_ip = LaunchConfiguration('robot_ip', default="192.168.1.234")
     report_type = LaunchConfiguration('report_type', default='normal')
     prefix = LaunchConfiguration('prefix', default='')
     hw_ns = LaunchConfiguration('hw_ns', default='xarm')

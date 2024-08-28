@@ -1,8 +1,8 @@
 {
     "robot_ip": "192.168.1.234",
-    "host": "192.168.1.231",
+    "host": "localhost",
     "g_port": 4243,
-    "x_port": 4242,
+    "x_port": 4250,
     "speed": 250.0,
     "acc": 50.0,
     "mvtime": 0.0,

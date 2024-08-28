@@ -10,6 +10,8 @@ import numpy as np
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from scipy.spatial.transform import Rotation
+
 
 class TcpSocket(Node):
     
@@ -98,11 +100,12 @@ class TcpSocket(Node):
                 else: 
                     # calculate the relative pose
                     print("Data received: ", data)
-                    # pose = data_selected
-                    pose = self.init_pose + data - self.init_data
-                    
-                    # set the absolute angle
-                    pose[3:6] = data[3:6]
+                    pose = data.copy()
+                    rvec = pose[3:6]
+                    r = Rotation.from_rotvec(rvec)
+                    euler = r.as_euler('xyz', degrees=False)
+                    pose[3:6] = euler
+                    # pose = self.init_pose + data - self.init_data
                     
                     # append the pose to the buffer
                     self.position.append(pose)
