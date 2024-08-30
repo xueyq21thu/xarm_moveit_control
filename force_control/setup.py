@@ -25,7 +25,8 @@ setup(
         'console_scripts': [
             "ft_vis = force_control.ft_vis:main",
             "fc = force_control.force_control:main",
-            "ft_pub = force_control.ft_pub:main"
+            "ft_pub = force_control.ft_pub:main",
+            "fsm = force_control.finite_state_machine:main",
         ],
     },
 )

@@ -22,9 +22,7 @@ class FT_Pub(Node):
         
     def init_ft_sensor(self):
         # enable ft sensor
-        req = SetInt16.Request()
-        req.data = 1
-        c = self.enable_ft_cli.call_async(req)
+        c = self.enable_ft_cli.call_async(SetInt16.Request(data=1))
         rclpy.spin_until_future_complete(self,c)
         if c.result() is not None:
             self.on = True
@@ -46,11 +44,10 @@ class FT_Pub(Node):
 def main():
     rclpy.init()
     ft_pub = FT_Pub()
-    print("?")
     ft_pub.init_ft_sensor()
-    # rclpy.spin(ft_pub)
-    print("!")
+    ft_pub.get_logger().info('FT sensor initialized')
     while rclpy.ok():
         ft_pub.get_ft_data()
-        time.sleep(0.05)
+        # ft_pub.publisher.publish(ft_pub.msg)
+        time.sleep(0.02)
     rclpy.shutdown()

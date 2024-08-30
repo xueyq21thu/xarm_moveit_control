@@ -133,9 +133,9 @@ def generate_launch_description():
             "--child-frame-id",
             "camera_link",
             "--x",
-            "-0.067",
+            "-0.007",
             "--y",
-            "0.041",
+            "0.051", 
             "--z",
             "0.095",
             "--qx",
@@ -191,12 +191,42 @@ def generate_launch_description():
         output='screen',
     )
     
+    # finite state machine run
+    # xarm_ros2/force_control/force_control/finite_state_machine.py
+    fsm = Node(
+        package='force_control',
+        executable='fsm',
+        name='finite_state_machine',
+        output='screen',
+    )
+    
+    # ft data pub run
+    # xarm_ros2/force_control/force_control/ft_pub.py
+    ft_pub = Node(
+        package='force_control',
+        executable='ft_pub',
+        name='ft_pub',
+        output='screen',
+    )
+    
+    # ft vis run
+    # xarm_ros2/force_control/force_control/ft_vis.py
+    ft_vis = Node(
+        package='force_control',
+        executable='ft_vis',
+        name='ft_vis',
+        output='screen',
+    )
+    
     return LaunchDescription([
         robot_moveit_realmove_launch,
         robot_planner_node_launch,
-        # cam,
+        cam,
         gripper,
         com_interface,
         tf_publisher,
-        # fc
+        # ft_pub,
+        # fc,
+        # fsm,
+        # ft_vis,
     ])
