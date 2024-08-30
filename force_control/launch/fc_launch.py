@@ -225,8 +225,8 @@ def generate_launch_description():
         gripper,
         com_interface,
         tf_publisher,
+        fc,
         # ft_pub,
-        # fc,
         # fsm,
         # ft_vis,
     ])

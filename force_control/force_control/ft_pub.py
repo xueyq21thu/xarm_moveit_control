@@ -36,8 +36,7 @@ class FT_Pub(Node):
             if c.result() is not None:
                 self.msg.data = c.result().datas
                 self.publisher.publish(self.msg)
-                # print('FT data published')
-                # print(self.msg.data)
+
         else:
             print('FT sensor not enabled')
     
@@ -48,6 +47,5 @@ def main():
     ft_pub.get_logger().info('FT sensor initialized')
     while rclpy.ok():
         ft_pub.get_ft_data()
-        # ft_pub.publisher.publish(ft_pub.msg)
         time.sleep(0.02)
     rclpy.shutdown()

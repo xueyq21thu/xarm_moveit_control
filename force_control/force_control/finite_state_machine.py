@@ -201,18 +201,17 @@ class FiniteStateMachine(Node):
     self.group1 = ReentrantCallbackGroup()
     
     # publisher
-    self.cmd_pub = self.create_publisher(Int16, 'cmd', 10)
+    self.cmd_pub = self.create_publisher(Int16, '/xarm_cmd', 10)
+    self.fref_pub = self.create_publisher(Float32MultiArray, 'xarm_fref', 10)
 
     # service for force control
-    self.update_ref_srv = self.create_service(SetFloat32List, 'update_force_ref', self.update_ref_callback)
-    self.start_move_srv = self.create_service(Call, 'start_move', self.start_move_callback)
-    self.end_move_srv = self.create_service(Call, 'end_move', self.end_move_callback)
+    self.update_ref_srv = self.create_service(SetFloat32List, 'update_force_ref', self.update_ref_callback, callback_group=self.group1)
+    self.start_move_srv = self.create_service(Call, 'start_move', self.start_move_callback, callback_group=self.group1)
+    self.end_move_srv = self.create_service(Call, 'end_move', self.end_move_callback, callback_group=self.group1)
     
     # subscriber
     self.ft_data_sub = self.create_subscription(Float32MultiArray, 'ft_values', self.ft_data_callback, 10, callback_group=self.group1)
     self.pose_sub = self.create_subscription(RobotMsg, 'xarm/robot_states', self.pose_callback, 10, callback_group=self.group1)
-
-    # self.xyq_command_sub = self.create_subscription(Bool, 'xyq_command', self.xyq_command_callback, 10)
     
     # force control client
 
@@ -242,13 +241,6 @@ class FiniteStateMachine(Node):
     self.clean_error_cli = self.create_client(Call,'xarm/clean_error', callback_group=self.group1)
     self.set_state = self.create_client(SetInt16,'xarm/set_state', callback_group=self.group1)
     
-    # client for fc
-    self.fc_start_move_cli = self.create_client(SetInt16, 'fc_start_move', callback_group=self.group1)
-    self.fc_end_move_cli = self.create_client(Call, 'fc_end_move', callback_group=self.group1)
-    self.fc_update_ref_cli = self.create_client(SetFloat32List, 'fc_update_force_ref', callback_group=self.group1)
-    self.reset_mode_cli = self.create_client(SetInt16, 'fc_mode_switch', callback_group=self.group1)
-    
-    
     # params
     self.fsm = "stop" # finite state machine
     # -1: not start, 0: loop, 1: start, 2: end, 3: update ref
@@ -263,128 +255,94 @@ class FiniteStateMachine(Node):
   def finite_state_machine(self):
     # finite state machine
     # calculate the data from force sensor
-    # print("fsm!")
-    # f = await self.get_data()
+
     if self.fsm == "stop":
-      print("stop")
-      # pass
+      # print("stop")
+      pass
     elif self.fsm == "PID":
       f = np.array(self.ft_data)
       p = np.array(self.pose)
       fg, tg = g_compensation(p)
       f = f - np.concatenate((fg, tg))
       f = f + self.offset
-      print(f)
+
       if (not self.gripper_status) and condition(p, f, self.f_ref, self.mode):
-        self.close_gripper()
-        self.reset_mode(False) # switch to imp control
+        self.reset_mode(False) # switch to impedance control
         self.fsm == "Imp"
-        return
-      print("PID")
+        # return
+      # print("PID")
 
     elif self.fsm == "Imp":
+      f = np.array(self.ft_data)
+      p = np.array(self.pose)
+      fg, tg = g_compensation(p)
+      f = f - np.concatenate((fg, tg))
+      f = f + self.offset
+      
       if self.gripper_status and condition(p, f, self.f_ref, self.mode):
-        self.open_gripper()
-        self.reset_mode(True)
+        self.reset_mode(True) # switch to pid force control
         self.fsm == "PID"
-        return
-      print("Imp")
+        # return
+      # print("Imp")
     else:
       print("error fsm state")
 
-    # print("fsm!")
 
-  # def xyq_command_callback(self, msg):
-  #   self.finite_state_machine()
-
-  async def ft_data_callback(self, msg):
+  def ft_data_callback(self, msg):
     # get force sensor data
     self.ft_data = msg.data
-    # asyncio.create_task(self.finite_state_machine())
-    await self.finite_state_machine()
+    # run finite state machine
+    self.finite_state_machine()
     
   def pose_callback(self, msg):
     # get pose from xarm
     self.pose = msg.pose
 
-  async def update_ref_callback(self, request, response):
-    self.f_ref = request.datas
-    # self.fsm = 3
-    a, b = self.update_ref(self.f_ref)
-    response.ret = 0
-    response.message = "Force reference updated!"
-    try:
-      res1 = await a
-      res2 = await b
-    except Exception as e:
-      print('Service call failed %r' % (e,))
-    
-    print("update ref callback!")
-    return response
-  
-  async def start_move_callback(self, request, response):
-    # print("Start!xy ")
-    # self.fsm = "PID"
-    a, b = self.start_move()
+  def start_move_callback(self, request, response):
     if self.mode:
-      # self.fc_start_move_cli.call_async(SetInt16.Request(data=2))
+      self.cmd_pub.publish(Int16(data=2))
       self.fsm = "PID"
     else:
-      # self.fc_start_move_cli.call_async(SetInt16.Request(data=1))
+      self.cmd_pub.publish(Int16(data=1))
       self.fsm = "Imp"
-    print(self.fsm)
-    try:
-      res1 = await a
-      res2 = await b
-    except Exception as e:
-      print('Service call failed %r' % (e,))
-      
-      
-    response.ret = 0
-    response.message = "start move callback!"
-    return response
-  
-  async def end_move_callback(self, request, response):
-    # self.end_move()
-    # print("end xy")
-    if self.fsm == "PID" or self.fsm == "Imp":
-      self.fsm = "stop"
-    a = self.end_move()
-    print(self.fsm)
-    # self.fc_end_move_cli.call_async(Call.Request())
-    response.ret = 0
-    response.message = "end move callback!"
-    try:
-      res = await a
-    except Exception as e:
-      print('Service call failed %r' % (e,))
     
     return response
+    
+  def end_move_callback(self, request, response):
+    if self.fsm == "PID" or self.fsm == "Imp":
+      self.fsm = "stop"
+    self.cmd_pub.publish(Int16(data=-1))
+    return response
+    
+  def update_ref_callback(self, request, response):
+    ref = request.datas
+    f_ref = np.array(ref[:3]) / 100
+    pose = np.array(self.pose)
+    ft = force_to_tcp(f_ref, pose)
+    self.f_ref = ft.tolist()
+    
+    self.fref_pub.publish(Float32MultiArray(data=self.f_ref))
+    self.fsm = "PID"
+    self.cmd_pub.publish(Int16(data=3))
+    return response
   
-  async def reset_mode(self, mode):
+  def reset_mode(self, mode):
     # if mode is force control, switch to impedance
-    print("reset mode")
-    # rclpy.spin_until_future_complete(self, self.fc_end_move_cli.call_async(Call.Request()))
-    # print("end move!")
     if mode:
       if not self.mode:
         self.mode = True
-        await self.start_move()
-        # self.fc_start_move_cli.call_async(SetInt16.Request(data=2))
-        # self.reset_mode_cli.call_async(SetInt16.Request(data=2))
+        self.open_gripper()
+        self.cmd_pub.publish(Int16(data=2))
         print("Force PID switched!")
         
     # if mode is impedance, switch to force control
     if not mode:
       if self.mode:
         self.mode = False
-        await self.start_move()
-        # self.fc_start_move_cli.call_async(SetInt16.Request(data=1))
-        # self.reset_mode_cli.call_async(SetInt16.Request(data=1))
+        self.close_gripper()
+        self.cmd_pub.publish(Int16(data=1))
         print("Impedance switched!")
-
-
-      
+     
   def init_gripper(self):
     set_modbus_timeout_request = SetModbusTimeout.Request()
     set_modbus_timeout_request.timeout = 2000
@@ -415,8 +373,10 @@ class FiniteStateMachine(Node):
       return
     close_req = GetSetModbusData.Request()
     close_req.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(0, 0))
-    rclpy.spin_until_future_complete(self, self.get_set_modbus_data_cli.call_async(close_req))
+    self.get_set_modbus_data_cli.call_async(close_req)
+    # rclpy.spin_until_future_complete(self, self.get_set_modbus_data_cli.call_async(close_req))
     self.gripper_status = True # status will change immediately
+    print("Gripper closed!")
     
   def open_gripper(self):
     if not self.gripper_status:
@@ -424,8 +384,10 @@ class FiniteStateMachine(Node):
     open_req = GetSetModbusData.Request()
     code1, code2 = dec_to_hex(1000)
     open_req.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(code1, code2))
-    rclpy.spin_until_future_complete(self, self.get_set_modbus_data_cli.call_async(open_req))
+    self.get_set_modbus_data_cli.call_async(open_req)
+    # rclpy.spin_until_future_complete(self, self.get_set_modbus_data_cli.call_async(open_req))
     self.gripper_status = False
+    print("Gripper opened!")
   
   def init_fc(self):
     '''
@@ -507,38 +469,6 @@ class FiniteStateMachine(Node):
       print("Force Sensor Enabled!")
     else:
       print("Force Sensor Enable Failed!")
-    
-  def start_move(self):
-    
-    # enable force control
-    app = SetInt16.Request()
-    if self.mode:
-      # force control
-      app.data = 2
-    else: 
-      # impedance control
-      app.data = 1
-    a = self.set_fapp_cli.call_async(app)
-    # rclpy.spin_until_future_complete(self,a)
-    
-    # it will start after state(0)
-    req = SetInt16.Request()
-    req.data = 0
-    b = self.set_state.call_async(req)
-    # rclpy.spin_until_future_complete(self,b)
-    
-    # start finite state machine
-    return a, b
-    
-  def end_move(self):
-    # disable app
-    app = SetInt16.Request()
-    app.data = 0
-    a = self.set_fapp_cli.call_async(app)
-    # rclpy.spin_until_future_complete(self,a)
-    
-    print("end!")
-    return a
 
   def init_impedance(self):
     '''
@@ -571,35 +501,6 @@ class FiniteStateMachine(Node):
     self.clean_error_cli.call_async(Call.Request())
     
     print("Impedance Initialized!")
-
-  def update_ref(self, ref):
-    '''
-    update force reference
-    '''
-    # clear ft offset
-    z = self.set_zero_cli.call_async(Call.Request())
-    # rclpy.spin_until_future_complete(self,z)
-    
-    # calculate the force on ee
-    f_ref = np.array(ref[:3]) / 100
-    pose = np.array(self.pose)
-    ft = force_to_tcp(f_ref, pose)
-    print("Force reference:", ft)
-    
-    # req = SetFloat32List.Request()
-    # req.datas = ft.tolist()
-    # c = self.fc_update_ref_cli.call_async(req)
-    # update force reference
-    cfg = FtForceConfig.Request()
-    cfg.c_axis = self.c_axis
-    cfg.coord = self.coord
-    cfg.ref = ft.tolist()
-    # cfg.ref = f_ref.tolist()
-    cfg.limits = self.limits
-    c = self.set_force_config_cli.call_async(cfg)
-    # rclpy.spin_until_future_complete(self,c)
-    print("Force reference updated!")
-    return c, z
     
   def get_pose(self):
     # get pose from xarm
@@ -619,28 +520,16 @@ class FiniteStateMachine(Node):
 def main():
   rclpy.init()
   # configure the force control
-  # print("start our fsm 1")
   fc = FiniteStateMachine()
-  # print("start our fsm 2")
   fc.init_fc()
-  # print("start our fsm 3")
   fc.init_gripper()
-  # print("start our fsm 4")
   fc.init_impedance()
-  # print("start our fsm 5")
   print("Force Control Initialized!")
   try:
-    # rclpy.spin_once(fc)
-
-    # print("start our fsm 6")
-    # fc.start_move()
-    # print("start our fsm 7")
     rclpy.spin(fc)
   finally:
     # end force control
-    # fc.end_move()
-    # fc.fc_end_move_cli.call(Call.Request())
-    
+    rclpy.spin_until_future_complete(fc.set_fapp_cli.call_async(SetInt16.Request(data=0)))
     rclpy.shutdown()
 
 if __name__ == "__main__":
