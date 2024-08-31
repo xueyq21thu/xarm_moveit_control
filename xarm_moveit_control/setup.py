@@ -25,10 +25,7 @@ setup(
         'console_scripts': [
             "xarm_moveit_control_service = xarm_moveit_control.xarm_moveit_control_service:main",
             "gripper_control_service = xarm_moveit_control.gripper_control_service:main",
-            "tcp_socket_plan = xarm_moveit_control.tcp_socket_plan:main",
             "add_table = xarm_moveit_control.add_table:main",
-            "cli_test = xarm_moveit_control.cli_test:main",
-            "tcp_socket_move = xarm_moveit_control.tcp_socket_move:main",
         ],
     },
 )

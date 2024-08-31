@@ -2,7 +2,6 @@
 from xarm_msgs.srv import SetModbusTimeout, GetInt32, SetInt16, SetInt32, SetFloat32, GetSetModbusData, Call, SetFloat32List, PlanPose, PlanExec, MoveCartesian, PlanSingleStraight
 from xarm_moveit_control.hardware_helper import get_dh_gripper_modbus_rtu_code, quaternion_from_euler, move_forward, euler_from_quaternion, dec_to_hex, hex_to_dec
 from copy import deepcopy
-from sympy import symbols, Matrix
 import numpy as np
 from array import array
 import rclpy, time
@@ -19,7 +18,7 @@ def decode_modbus_data(byte_array):
 class GripperControlService(Node):
     def __init__(self):
         super().__init__('gripper_control_service')
-        self.gripper_init_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
+        self.gripper_init_srv_callbackgroup = ReentrantCallbackGroup()
         
         self.get_gripper_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
         self.set_gripper_srv_callbackgroup = MutuallyExclusiveCallbackGroup()
@@ -31,10 +30,12 @@ class GripperControlService(Node):
         self.get_gripper_srv = self.create_service(Call, 'get_gripper', self.get_gripper_callback, callback_group=self.get_gripper_srv_callbackgroup)
         self.set_gripper_srv = self.create_service(SetInt32, 'set_gripper', self.set_gripper_callback, callback_group=self.set_gripper_srv_callbackgroup)
         
+        self.open_gripper_srv = self.create_service(Call, 'open_gripper', self.open_gripper_callback, callback_group=self.gripper_init_srv_callbackgroup)
+        self.close_gripper_srv = self.create_service(Call, 'close_gripper', self.close_gripper_callback, callback_group=self.gripper_init_srv_callbackgroup)
+        
         self.get_set_modbus_data_cli = self.create_client(GetSetModbusData, '/xarm/getset_tgpio_modbus_data', callback_group=self.get_set_modbus_data_cli_callbackgroup)
         self.set_baudrate_cli = self.create_client(SetInt32, '/xarm/set_tgpio_modbus_baudrate', callback_group=MutuallyExclusiveCallbackGroup() )
         self.set_modbus_timeout_cli = self.create_client(SetModbusTimeout, '/xarm/set_tgpio_modbus_timeout', callback_group=MutuallyExclusiveCallbackGroup())
-
 
 
     
@@ -155,6 +156,18 @@ class GripperControlService(Node):
         print(size.tolist())
         
         return response
+
+    def open_gripper_callback(self, request, response):
+        code1, code2 = dec_to_hex(1000)
+        req = GetSetModbusData.Request()
+        req.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(code1, code2))
+        self.get_set_modbus_data_cli.call_async(req)
+        
+    def close_gripper_callback(self, request, response):
+        code1, code2 = dec_to_hex(0)
+        req = GetSetModbusData.Request()
+        req.modbus_data = get_dh_gripper_modbus_rtu_code(addr_code=1, function_code=6, register_code=(1, 3), data_code=(code1, code2))
+        self.get_set_modbus_data_cli.call_async(req)
 
 def main():
     rclpy.init()
