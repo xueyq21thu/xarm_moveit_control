@@ -316,13 +316,15 @@ class FiniteStateMachine(Node):
     
   def update_ref_callback(self, request, response):
     ref = request.datas
-    f_ref = np.array(ref[:3]) / 100
+    f_ref = np.array(ref[:3]) / 100.0
     pose = np.array(self.pose)
     ft = force_to_tcp(f_ref, pose)
     self.f_ref = ft.tolist()
     
     self.fref_pub.publish(Float32MultiArray(data=self.f_ref))
     self.fsm = "PID"
+    self.mode = True
+    self.open_gripper()
     self.cmd_pub.publish(Int16(data=3))
     return response
   

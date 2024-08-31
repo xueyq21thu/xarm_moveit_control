@@ -191,6 +191,15 @@ def generate_launch_description():
         output='screen',
     )
     
+    # run quest3 connection
+    # ROS-TCP-Endpoint/ros_tcp_endpoint/default_server_endpoint.py
+    quest3 = Node(
+        package='ros_tcp_endpoint',
+        executable='default_server_endpoint',
+        name='quest3',
+        output='screen',
+    )
+    
     # finite state machine run
     # xarm_ros2/force_control/force_control/finite_state_machine.py
     fsm = Node(
@@ -226,6 +235,7 @@ def generate_launch_description():
         com_interface,
         tf_publisher,
         fc,
+        quest3
         # ft_pub,
         # fsm,
         # ft_vis,
