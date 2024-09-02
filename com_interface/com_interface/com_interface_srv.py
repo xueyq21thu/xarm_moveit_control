@@ -110,7 +110,8 @@ class ComSrv(Node):
         
         # reset the robot
         self.xarm_pose_request.pose = [ 472.631836, 0.174363, 538.114868, 3.140461, 0.025776, 1.586435 ]
-        self.pose_move_cli.call_async(self.xarm_pose_request)
+        f = self.pose_move_cli.call_async(self.xarm_pose_request)
+        rclpy.spin_until_future_complete(self, f)
         print("Robot reset!")
         return response
     
