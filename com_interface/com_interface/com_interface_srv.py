@@ -1,15 +1,15 @@
 import rclpy, numpy as np
 from rclpy.node import Node
 from xarm_msgs.srv import SetFloat32List, MoveCartesian, GetFloat32List, SetInt16, Call, SetTcpLoad
+from scipy.spatial.transform import Rotation
 from rclpy.callback_groups import ReentrantCallbackGroup
 import time
 
 def rot_to_euler(R):
-    # convert rotation matrix to euler angles, only in this shitty hole
-    r = np.arctan2(R[2,1], R[2,2])
-    p = np.arctan2(-R[2,0], np.sqrt(R[2,1]**2 + R[2,2]**2))
-    y = np.arctan2(R[1,0], R[0,0])
-    return np.array([p, -r, y])
+    # convert rotation matrix to euler angles
+    # only in this shitty hole
+    rpy = Rotation.from_matrix(R).as_euler('xyz', degrees=False)
+    return np.array(rpy)
 
 class ComSrv(Node):
     def __init__(self) -> None:
@@ -60,10 +60,12 @@ class ComSrv(Node):
         print("Robot initialized!")
     
     def ee_pose_callback(self, request, response):
+        self.set_fapp_cli.call_async(SetInt16.Request(data=0))
         # get ee pose from the quest3
         request_data = np.array(request.datas)
+        print(request_data)
         xyz = request_data[0:3]
-        R = np.array([-1 * request_data[3:6], request_data[6:9], request_data[9:12]])
+        R = np.array([-request_data[3:6], request_data[6:9], request_data[9:12]]).T
         rpy = rot_to_euler(R)
         
         pose = np.concatenate((xyz, rpy))
@@ -72,11 +74,13 @@ class ComSrv(Node):
         
         # end the force control
         # self.end_cli.call_async(Call.Request())
-        self.set_fapp_cli.call_async(SetInt16.Request(data=0))
+
         self.set_state_cli.call_async(SetInt16.Request(data=0))
         
         # move the robot to the desired pose
         self.pose_move_cli.call_async(self.xarm_pose_request)
+        # rclpy.spin_until_future_complete(self, f)
+        # print(f.result())
 
         print(f"Robot moved to: {self.cmd_pose}")
         return response
@@ -111,7 +115,7 @@ class ComSrv(Node):
         # reset the robot
         self.xarm_pose_request.pose = [ 472.631836, 0.174363, 538.114868, 3.140461, 0.025776, 1.586435 ]
         f = self.pose_move_cli.call_async(self.xarm_pose_request)
-        rclpy.spin_until_future_complete(self, f)
+        # rclpy.spin_until_future_complete(self, f)
         print("Robot reset!")
         return response
     

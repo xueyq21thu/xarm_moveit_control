@@ -235,7 +235,7 @@ def generate_launch_description():
         # com_interface,
         tf_publisher,
         fc,
-        quest3
+        # quest3
         # ft_pub,
         # fsm,
         # ft_vis,
