@@ -4,6 +4,7 @@ import json, rclpy, time
 from rclpy.node import Node
 from typing import List, Tuple
 from xarm_msgs.msg import RobotMsg
+from geometry_msgs.msg import WrenchStamped
 from std_msgs.msg import Float32MultiArray, Int16
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
@@ -145,14 +146,14 @@ def condition(pose, force, ref, mode):
   # force control
   # actual force is higher than normal plain of reference force
   if mode:
-    if np.dot(f, f_ref)< -np.dot(f_ref, f_ref):
+    if np.dot(f, f_ref) > np.dot(f_ref, f_ref):
       return True
     else:
       return False
   # impedance control
   # actual force is lower than opposite normal plain of reference force
   elif not mode:
-    if np.dot(f, f_ref) > np.dot(f_ref, f_ref):
+    if np.dot(f, f_ref) < -np.dot(f_ref, f_ref):
       return True
     else:
       return False
@@ -197,7 +198,7 @@ class FiniteStateMachine(Node):
   def __init__(self):
     super().__init__('FSM')
     
-    self.initialized = False
+    self.init_flag = False
     self.group1 = ReentrantCallbackGroup()
     
     # publisher
@@ -210,7 +211,7 @@ class FiniteStateMachine(Node):
     self.end_move_srv = self.create_service(Call, 'end_move', self.end_move_callback, callback_group=self.group1)
     
     # subscriber
-    self.ft_data_sub = self.create_subscription(Float32MultiArray, 'ft_values', self.ft_data_callback, 10, callback_group=self.group1)
+    self.ft_data_sub = self.create_subscription(WrenchStamped, '/xarm/uf_ftsensor_ext_states', self.ft_data_callback, 10, callback_group=self.group1)
     self.pose_sub = self.create_subscription(RobotMsg, 'xarm/robot_states', self.pose_callback, 10, callback_group=self.group1)
     
     # force control client
@@ -250,7 +251,6 @@ class FiniteStateMachine(Node):
     self.ft_data = []
     self.pose = []
 
-    self.initialized = True
 
   def finite_state_machine(self):
     # finite state machine
@@ -289,8 +289,15 @@ class FiniteStateMachine(Node):
 
 
   def ft_data_callback(self, msg):
+    if not self.init_flag:
+      return
     # get force sensor data
-    self.ft_data = msg.data
+    # self.ft_data = msg.data
+    f = msg.wrench.force
+    t = msg.wrench.torque
+    f = np.array([f.x, f.y, f.z])
+    t = np.array([t.x, t.y, t.z])
+    self.ft_data = np.concatenate((f,t)).tolist()
     # run finite state machine
     self.finite_state_machine()
     
@@ -299,13 +306,14 @@ class FiniteStateMachine(Node):
     self.pose = msg.pose
 
   def start_move_callback(self, request, response):
-    if self.mode:
-      self.cmd_pub.publish(Int16(data=2))
-      self.fsm = "PID"
-    else:
-      self.cmd_pub.publish(Int16(data=1))
-      self.fsm = "Imp"
+    # if self.mode:
+    self.cmd_pub.publish(Int16(data=2))
+    self.fsm = "PID"
+    # else:
+    #   self.cmd_pub.publish(Int16(data=1))
+    #   self.fsm = "Imp"
     
+
     return response
     
   def end_move_callback(self, request, response):
@@ -320,12 +328,14 @@ class FiniteStateMachine(Node):
     pose = np.array(self.pose)
     ft = force_to_tcp(f_ref, pose)
     self.f_ref = ft.tolist()
+    print(self.f_ref)
     
     self.fref_pub.publish(Float32MultiArray(data=self.f_ref))
     self.fsm = "PID"
     self.mode = True
     self.open_gripper()
     self.cmd_pub.publish(Int16(data=3))
+    print("Force reference updated!")
     return response
   
   def reset_mode(self, mode):
@@ -395,7 +405,7 @@ class FiniteStateMachine(Node):
     '''
     initialize force control
     '''
-    
+    self.init_flag = False
     # params config
     path = "/home/robot1/xyq_ws/src/xarm-ros2/force_control/config.json"
     with open(path, 'r') as f:
@@ -411,28 +421,33 @@ class FiniteStateMachine(Node):
     self.f_ref = config["ref"]
     self.limits = config["limits"]
     
-    
-    # print("fc 1")
 
+    enable = self.enable_ft_cli.call_async(SetInt16.Request(data=1))
+    rclpy.spin_until_future_complete(self,enable)
+        
+    print("fc 1")
+    
     # Set PID of motion
     pid = FtForcePid.Request()
     pid.kp = self.kp
     pid.ki = self.ki
     pid.kd = self.kd
     pid.xe_limit = self.xe_limit
-    f = self.set_force_pid_cli.call_async(pid)
-    rclpy.spin_until_future_complete(self,f)
-    # print("fc 2")
+
     
     cfg = FtForceConfig.Request()
     cfg.c_axis = self.c_axis
     cfg.coord = self.coord
     cfg.limits = self.limits
     
+    # f = self.set_force_pid_cli.call_async(pid)
+    # rclpy.spin_until_future_complete(self,f)
+    print("fc 2")
+    
     # Compensate gravity
     pose = self.get_pose_cli.call_async(GetFloat32List.Request())
     rclpy.spin_until_future_complete(self,pose)
-    # print("fc 3")
+    print("fc 3")
 
     pose = pose.result().datas
     f_ref = np.array(self.f_ref[:3])
@@ -469,6 +484,7 @@ class FiniteStateMachine(Node):
   
     if c.result() is not None:
       print("Force Sensor Enabled!")
+      self.init_flag = True
     else:
       print("Force Sensor Enable Failed!")
 
@@ -531,7 +547,7 @@ def main():
     rclpy.spin(fc)
   finally:
     # end force control
-    rclpy.spin_until_future_complete(fc.set_fapp_cli.call_async(SetInt16.Request(data=0)))
+    rclpy.spin_until_future_complete(fc,fc.set_fapp_cli.call_async(SetInt16.Request(data=0)))
     rclpy.shutdown()
 
 if __name__ == "__main__":

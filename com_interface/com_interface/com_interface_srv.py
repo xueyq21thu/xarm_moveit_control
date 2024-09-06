@@ -5,6 +5,9 @@ from scipy.spatial.transform import Rotation
 from rclpy.callback_groups import ReentrantCallbackGroup
 import time
 
+
+p_g_tcp = np.array([0.0, 0.0, 65])
+
 def rot_to_euler(R):
     # convert rotation matrix to euler angles
     # only in this shitty hole
@@ -51,6 +54,8 @@ class ComSrv(Node):
         self.xarm_pose_request.mvtime = self.mvtime
         self.xarm_pose_request.pose = [ 472.631836, 0.174363, 538.114868, 3.140461, 0.025776, 1.586435 ]
             
+            
+        
     def init_robot(self):
         # set the robot to the initial pose
         # rclpy.spin_until_future_complete(self, self.error_cli.call_async(Call.Request()))
@@ -59,6 +64,7 @@ class ComSrv(Node):
         self.pose_move_cli.call_async(self.xarm_pose_request)
         print("Robot initialized!")
     
+
     def ee_pose_callback(self, request, response):
         self.set_fapp_cli.call_async(SetInt16.Request(data=0))
         # get ee pose from the quest3
@@ -67,6 +73,9 @@ class ComSrv(Node):
         xyz = request_data[0:3]
         R = np.array([-request_data[3:6], request_data[6:9], request_data[9:12]]).T
         rpy = rot_to_euler(R)
+        
+        p_tcp_base = np.dot(R, -p_g_tcp)
+        xyz = xyz + p_tcp_base
         
         pose = np.concatenate((xyz, rpy))
         self.cmd_pose = pose

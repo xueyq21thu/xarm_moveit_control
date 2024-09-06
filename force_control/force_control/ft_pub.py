@@ -1,8 +1,9 @@
 import rclpy
 from rclpy.node import Node
 from xarm_msgs.srv import GetFloat32List, SetInt16
+from geometry_msgs.msg import WrenchStamped
 from std_msgs.msg import Float32MultiArray
-import time
+import time, numpy as np
 
 class FT_Pub(Node):
     def __init__(self):
@@ -11,14 +12,28 @@ class FT_Pub(Node):
         # publisher
         self.publisher = self.create_publisher(Float32MultiArray, 'ft_values', 10)
         
+        # subscriber
+        self.subscription = self.create_subscription(WrenchStamped, '/xarm/uf_ftsensor_raw_states', self.listener_callback, 10)
+        
         # service
-        self.get_data_cli = self.create_client(GetFloat32List,'/xarm/get_ft_sensor_data')
-        self.enable_ft_cli = self.create_client(SetInt16,'/xarm/ft_sensor_enable')
+        self.get_data_cli = self.create_client(GetFloat32List, '/xarm/get_ft_sensor_data')
+        self.enable_ft_cli = self.create_client(SetInt16, '/xarm/ft_sensor_enable')
         
         # message
         self.msg = Float32MultiArray()
         
         self.on = False
+        self.period = 0.0
+        
+    def listener_callback(self, msg):
+        self.period = time.time() - self.period
+        print('Period:', self.period)
+        f = msg.wrench.force
+        t = msg.wrench.torque
+        f = np.array([f.x, f.y, f.z])
+        t = np.array([t.x, t.y, t.z])
+        self.ft_data = np.concatenate((f,t)).tolist()
+        # print(self.ft_data)
         
     def init_ft_sensor(self):
         # enable ft sensor
@@ -37,15 +52,19 @@ class FT_Pub(Node):
                 self.msg.data = c.result().datas
                 self.publisher.publish(self.msg)
 
-        else:
-            print('FT sensor not enabled')
+            else:
+                print('FT sensor not enabled')
     
 def main():
     rclpy.init()
     ft_pub = FT_Pub()
-    ft_pub.init_ft_sensor()
+    # ft_pub.init_ft_sensor()
     ft_pub.get_logger().info('FT sensor initialized')
-    while rclpy.ok():
-        ft_pub.get_ft_data()
-        time.sleep(0.02)
+    rclpy.spin(ft_pub)
+    # while rclpy.ok():
+    #     # ft_pub.get_ft_data()
+    #     time.sleep(0.1)
     rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

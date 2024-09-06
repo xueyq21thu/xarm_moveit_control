@@ -4,15 +4,15 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from sensor_msgs.msg import Image, PointCloud2, PointField
 import cv2
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import open3d as o3d
 
 class SubCam(Node):
     def __init__(self) -> None:
         super().__init__("sub_cam")
-        self.rgb_sub = self.create_subscription(Image, '/camera/color/image_raw', self.rgb_callback, 10)
+        # self.rgb_sub = self.create_subscription(Image, '/camera/color/image_raw', self.rgb_callback, 10)
         # self.dpt_sub = self.create_subscription(PointCloud2, '/camera/depth/points',self.dpt_callback, 10)
-        # self.dep_rgb_sub = self.create_subscription(PointCloud2, '/camera/depth_registered/points',self.dpt_rgb_callback, 10)
+        self.dep_rgb_sub = self.create_subscription(PointCloud2, '/camera/depth_registered/points',self.dpt_rgb_callback, 10)
         self.frame_num = 0
         self.frame = []
         
@@ -28,7 +28,7 @@ class SubCam(Node):
         points = self.pointcloud2_to_array(msg)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points[:, :3])
-        o3d.io.write_point_cloud(f"pointcloud{self.frame_num}.ply", pcd)
+        o3d.io.write_point_cloud(f"src/xarm-ros2/cam_com/pointcloud{self.frame_num}.ply", pcd)
         self.frame_num += 1
         print(f"Frame {self.frame_num} saved.")
         
@@ -44,9 +44,9 @@ class SubCam(Node):
         color = np.stack([(color >> 16) & 255, (color >> 8) & 255, color & 255], axis=-1)
 
         pcd.colors = o3d.utility.Vector3dVector(color / 255.0)
-        print(1)
-        o3d.io.write_point_cloud(f"pointcloud_rgb{self.frame_num}_asci.ply", pcd, write_ascii=True)
-        # o3d.io.write_point_cloud(f"pointcloud_rgb{self.frame_num}.ply", pcd)
+        # print(1)
+        # o3d.io.write_point_cloud(f"pointcloud_rgb{self.frame_num}_asci.ply", pcd, write_ascii=True)
+        o3d.io.write_point_cloud(f"src/xarm-ros2/cam_com/pointcloud_rgb{self.frame_num}.pcd", pcd)
         print(f"Frame {self.frame_num} saved.")
         self.frame_num += 1
         

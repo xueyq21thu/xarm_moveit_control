@@ -21,7 +21,7 @@ robotip = config['robot_ip']
 
 def generate_launch_description():
     robot_ip = LaunchConfiguration('robot_ip', default=robotip)
-    report_type = LaunchConfiguration('report_type', default='normal')
+    report_type = LaunchConfiguration('report_type', default='rich')
     prefix = LaunchConfiguration('prefix', default='')
     hw_ns = LaunchConfiguration('hw_ns', default='xarm')
     limited = LaunchConfiguration('limited', default=True)
