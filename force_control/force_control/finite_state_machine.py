@@ -5,11 +5,12 @@ from rclpy.node import Node
 from typing import List, Tuple
 from xarm_msgs.msg import RobotMsg
 from geometry_msgs.msg import WrenchStamped
+from scipy.spatial.transform import Rotation
 from std_msgs.msg import Float32MultiArray, Int16
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from xarm_msgs.srv import GetFloat32List, SetInt16, Call, GetInt16, FtForceConfig, SetFloat32List
-from xarm_msgs.srv import GetSetModbusData, SetInt32, SetModbusTimeout, FtForcePid, FtImpedance, SetTcpLoad
+from xarm_msgs.srv import GetSetModbusData, SetInt32, SetModbusTimeout, FtForcePid, FtImpedance, SetTcpLoad, MoveCartesian
 
 
 # gripper helper
@@ -158,7 +159,14 @@ def condition(pose, force, ref, mode):
     else:
       return False
 
-  
+def rot_to_euler(R):
+    # convert rotation matrix to euler angles
+    rpy = Rotation.from_matrix(R).as_euler('xyz', degrees=False)
+    return np.array(rpy)
+
+
+p_g_tcp = np.array([0.0, 0.0, 65])
+
 # params config description
 '''
   float kp[6] = { 0.005, 0.005, 0.005, 0.005, 0.005, 0.005 }; // range: 0 ~ 0.05
@@ -206,7 +214,11 @@ class FiniteStateMachine(Node):
     self.fref_pub = self.create_publisher(Float32MultiArray, 'xarm_fref', 10)
 
     # service for force control
-    self.update_ref_srv = self.create_service(SetFloat32List, 'update_force_ref', self.update_ref_callback, callback_group=self.group1)
+    self.ee_pose_srv = self.create_service(SetFloat32List, 'ee_pose', self.ee_pose_callback, callback_group=self.group1)
+    self.reset_srv = self.create_service(Call, 'reset_pose', self.reset_callback, callback_group=self.group1)
+    
+    # self.force_srv = self.create_service(SetFloat32List, 'force', self.force_callback, callback_group=self.group1)
+    self.update_ref_srv = self.create_service(SetFloat32List, 'force', self.update_ref_callback, callback_group=self.group1)
     self.start_move_srv = self.create_service(Call, 'start_move', self.start_move_callback, callback_group=self.group1)
     self.end_move_srv = self.create_service(Call, 'end_move', self.end_move_callback, callback_group=self.group1)
     
@@ -235,6 +247,7 @@ class FiniteStateMachine(Node):
     
     # pose client
     self.get_pose_cli = self.create_client(GetFloat32List,'/xarm/get_position', callback_group=self.group1)
+    self.pose_move_cli = self.create_client(MoveCartesian,'/xarm/set_position', callback_group=self.group1)
     self.set_load_cli = self.create_client(SetTcpLoad, '/xarm/set_tcp_load', callback_group=self.group1)
     
     # clear error and warn
@@ -250,6 +263,10 @@ class FiniteStateMachine(Node):
     self.gripper_status = False # False: open, True: close
     self.ft_data = []
     self.pose = []
+    self.xarm_pose_request = MoveCartesian.Request()
+    self.xarm_pose_request.speed = 300.0
+    self.xarm_pose_request.acc = 100.0
+    self.xarm_pose_request.mvtime = 0.0
 
 
   def finite_state_machine(self):
@@ -297,6 +314,20 @@ class FiniteStateMachine(Node):
     t = msg.wrench.torque
     f = np.array([f.x, f.y, f.z])
     t = np.array([t.x, t.y, t.z])
+    
+    # filter force sensor data
+    if np.linalg.norm(f) < 0.5:
+      f = np.array([0, 0, 0])
+    if np.linalg.norm(t) < 0.005:
+      t = np.array([0, 0, 0])
+    
+    # filter force in main direction
+    if np.abs(f[2]) < 0.2:
+      f[2] = 0
+    if np.abs(f[1]) < 0.2:
+      f[1] = 0
+    if np.abs(f[0]) < 0.2:
+      f[0] = 0
     self.ft_data = np.concatenate((f,t)).tolist()
     # run finite state machine
     self.finite_state_machine()
@@ -324,18 +355,61 @@ class FiniteStateMachine(Node):
     
   def update_ref_callback(self, request, response):
     ref = request.datas
-    f_ref = np.array(ref[:3]) / 100.0
+    f_ref = np.array(ref[:3]) / 40.0
     pose = np.array(self.pose)
     ft = force_to_tcp(f_ref, pose)
     self.f_ref = ft.tolist()
     print(self.f_ref)
+    f_data = np.concatenate((ft, f_ref ))
+    print(f_data)
     
-    self.fref_pub.publish(Float32MultiArray(data=self.f_ref))
+    # publish force reference
+    
+    self.fref_pub.publish(Float32MultiArray(data=f_data))
     self.fsm = "PID"
     self.mode = True
     self.open_gripper()
     self.cmd_pub.publish(Int16(data=3))
-    print("Force reference updated!")
+    print(f"Force reference updated! {f_ref}")
+    return response
+  
+  def ee_pose_callback(self, request, response):
+    # stop force control
+    self.set_fapp_cli.call_async(SetInt16.Request(data=0))
+    request_data = np.array(request.datas)
+    xyz = request_data[0:3]
+    R = np.array([-request_data[3:6], request_data[6:9], request_data[9:12]]).T
+    rpy = rot_to_euler(R)
+    p_tcp_base = np.dot(R, -p_g_tcp)
+    xyz = xyz + p_tcp_base
+    
+    pose = np.concatenate((xyz, rpy))
+    self.xarm_pose_request.pose = pose.tolist()
+    
+    self.set_state.call_async(SetInt16.Request(data=0))
+    self.pose_move_cli.call_async(self.xarm_pose_request)
+    self.fsm = "stop"
+    print("Robot moved to: {}".format(pose))
+    return response
+  
+  def reset_callback(self, request, response):
+    # clear warn and error
+    self.clean_warn_cli.call_async(Call.Request())
+    self.clean_error_cli.call_async(Call.Request())
+    
+    # stop force control and set state to 0
+    # self.set_fapp_cli.call_async(SetInt16.Request(data=0))
+    self.set_state.call_async(SetInt16.Request(data=0))
+    self.open_gripper()
+    
+    
+    # reset mode
+    self.fsm = "stop"
+    
+    # reset pose
+    self.xarm_pose_request.pose = [ 472.631836, 0.174363, 538.114868, 3.140461, 0.025776, 1.586435 ]
+    self.pose_move_cli.call_async(self.xarm_pose_request)
+    print("Robot reset!")
     return response
   
   def reset_mode(self, mode):
@@ -425,7 +499,6 @@ class FiniteStateMachine(Node):
     enable = self.enable_ft_cli.call_async(SetInt16.Request(data=1))
     rclpy.spin_until_future_complete(self,enable)
         
-    print("fc 1")
     
     # Set PID of motion
     pid = FtForcePid.Request()
@@ -442,12 +515,10 @@ class FiniteStateMachine(Node):
     
     # f = self.set_force_pid_cli.call_async(pid)
     # rclpy.spin_until_future_complete(self,f)
-    print("fc 2")
     
     # Compensate gravity
     pose = self.get_pose_cli.call_async(GetFloat32List.Request())
     rclpy.spin_until_future_complete(self,pose)
-    print("fc 3")
 
     pose = pose.result().datas
     f_ref = np.array(self.f_ref[:3])

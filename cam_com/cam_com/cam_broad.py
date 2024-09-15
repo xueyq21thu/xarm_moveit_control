@@ -79,13 +79,13 @@ class CamBroad(Node):
         # self.broadcaster.sendTransform(self.rcp_tf)
 
         # self.broadcaster.sendTransform(self.transform)
-        # self.timer = self.create_timer(0.1, self.timer_callback)
-        self.timer = self.create_timer(1, self.timer_callback)
+        self.timer = self.create_timer(0.1, self.timer_callback)
+        # self.timer = self.create_timer(1, self.timer_callback)
 
         self.idx = 0
 
     def timer_callback(self):
-        self.idx = 11
+        # self.idx = 11
         with open("src/xarm-ros2/cam_com/cam_com/grasp.json", "r") as f:
             data = json.load(f)
             p = data[f"position{self.idx}"]
@@ -95,8 +95,8 @@ class CamBroad(Node):
         pose = np.concatenate((p, r))
         q = tf_transformations.quaternion_from_euler(r[0], r[1], r[2])
         self.transform.header.frame_id = 'camera_color_optical_frame'
-        self.transform.child_frame_id = 'grasping_pose'
-        # self.transform.child_frame_id = f'grasping_pose{self.idx}'
+        # self.transform.child_frame_id = 'grasping_pose'
+        self.transform.child_frame_id = f'grasping_pose{self.idx}'
         self.transform.transform.translation.x = pose[0]
         self.transform.transform.translation.y = pose[1]
         self.transform.transform.translation.z = pose[2]
@@ -108,9 +108,9 @@ class CamBroad(Node):
         self.broadcaster.sendTransform(self.rcp_tf)
         pose[:3] = pose[:3] * 1000
         print(pose)
-        # self.idx += 1
-        # if self.idx == 20:
-        #     self.idx = 0
+        self.idx += 1
+        if self.idx == 20:
+            self.idx = 0
         # print("Transform sent.")
 
 def main(args=None):

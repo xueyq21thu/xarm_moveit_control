@@ -85,6 +85,7 @@ class ComSrv(Node):
         # self.end_cli.call_async(Call.Request())
 
         self.set_state_cli.call_async(SetInt16.Request(data=0))
+        # self.end_cli.call_async(Call.Request())
         
         # move the robot to the desired pose
         self.pose_move_cli.call_async(self.xarm_pose_request)

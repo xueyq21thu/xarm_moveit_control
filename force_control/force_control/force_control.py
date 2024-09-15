@@ -58,6 +58,9 @@ class ForceControl(Node):
     
     def fref_callback(self, msg):
         self.f_ref = msg.data
+        # speed = np.array(self.f_ref[3:6])/ np.linalg.norm(self.f_ref[3:6]) * 20.0
+        # print(f"Speed: {speed}")
+        # self.xe_limit = [np.abs(speed[0]), np.abs(speed[1]), np.abs(speed[2]), 2.0, 2.0, 2.0]
     
     def timer_callback(self):
         if self.cmd == 0:
@@ -80,6 +83,15 @@ class ForceControl(Node):
             cfg.limits = self.limits
             cfg.ref = self.f_ref
             self.set_force_config_cli.call_async(cfg)
+            
+            pid = FtForcePid.Request()
+            pid.kp = self.kp
+            pid.ki = self.ki
+            pid.kd = self.kd
+            pid.xe_limit = self.xe_limit
+            # self.set_force_pid_cli.call_async(pid)
+            
+            
             self.cmd = 2
             print(f"Update force ref: {self.f_ref}")
             

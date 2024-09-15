@@ -10,17 +10,35 @@ import open3d as o3d
 class SubCam(Node):
     def __init__(self) -> None:
         super().__init__("sub_cam")
-        # self.rgb_sub = self.create_subscription(Image, '/camera/color/image_raw', self.rgb_callback, 10)
-        # self.dpt_sub = self.create_subscription(PointCloud2, '/camera/depth/points',self.dpt_callback, 10)
+        self.rgb_sub = self.create_subscription(Image, '/camera/color/image_raw', self.rgb_callback, 10)
+        self.dpt_img_sub = self.create_subscription(Image, '/camera/depth/image_raw', self.dpt_img_callback, 10)
         self.dep_rgb_sub = self.create_subscription(PointCloud2, '/camera/depth_registered/points',self.dpt_rgb_callback, 10)
+        # self.dpt_sub = self.create_subscription(PointCloud2, '/camera/depth/points',self.dpt_callback, 10)
+
         self.frame_num = 0
         self.frame = []
         
     def rgb_callback(self, msg):
+        if self.frame_num > 1:
+            return
         data = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
-        # print(data)
-        cv2.imshow('RGB Image', data)
-        cv2.waitKey(1)
+        
+        # switch BGR to RGB
+        data = cv2.cvtColor(data, cv2.COLOR_BGR2RGB)
+        
+        # save image
+        cv2.imwrite("src/xarm-ros2/cam_com/rgb.jpg", data)
+        print("RGB image saved.")
+        
+    def dpt_img_callback(self, msg):
+        if self.frame_num > 1:
+            return
+        data = np.frombuffer(msg.data, dtype=np.uint16).reshape((msg.height, msg.width))
+        
+        cv2.imwrite("src/xarm-ros2/cam_com/depth.PNG", data)
+        print("Depth image saved.")
+        # print(data[400,500:700])
+        
         
     def dpt_callback(self, msg):
         if self.frame_num > 30:
@@ -39,28 +57,19 @@ class SubCam(Node):
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points[:, :3])
         color = points[:, 4].view(np.uint32)
-        # print(color.shape)
         # convert to RGB
         color = np.stack([(color >> 16) & 255, (color >> 8) & 255, color & 255], axis=-1)
 
         pcd.colors = o3d.utility.Vector3dVector(color / 255.0)
-        # print(1)
-        # o3d.io.write_point_cloud(f"pointcloud_rgb{self.frame_num}_asci.ply", pcd, write_ascii=True)
         o3d.io.write_point_cloud(f"src/xarm-ros2/cam_com/pointcloud_rgb{self.frame_num}.pcd", pcd)
         print(f"Frame {self.frame_num} saved.")
         self.frame_num += 1
         
         
     def pointcloud2_to_array(self, cloud_msg):
-        # conver pointcloud 2 into numpy array
-        # dtype_list = self.fields_to_dtype(cloud_msg.fields)
-        # print(dtype_list)
-        # print("point_step: ")
-        # print(cloud_msg.point_step)
         cloud_arr = np.frombuffer(cloud_msg.data, dtype=np.float32)
         dim = cloud_msg.point_step // 4 # 4 is the size of float32
         cloud_arr = cloud_arr.view(np.float32).reshape(-1, dim)
-        # print(cloud_arr.shape)
         return cloud_arr
     
     def fields_to_dtype(self, fields):
