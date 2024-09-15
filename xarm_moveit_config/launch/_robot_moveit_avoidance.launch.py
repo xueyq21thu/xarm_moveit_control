@@ -12,7 +12,6 @@ copy from /xarm_ros2/xarm_moveit_config/launch/_robot_moveit_common.launch.py
 with sensor manager parameters added
 '''
 
-
 import os
 from ament_index_python import get_package_share_directory
 from launch.launch_description_sources import load_python_launch_file_as_module
@@ -24,20 +23,30 @@ from launch_ros.substitutions import FindPackageShare
 from launch.actions import RegisterEventHandler, EmitEvent
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
+import json
+
+cfg_path = "/home/robot1/xyq_ws/src/xarm-ros2/force_control/config.json"
+with open(cfg_path, 'r') as f:
+    cfg = json.load(f)
+    max_range = cfg['pc_max_range']
+    subsample = cfg['pc_subsample']
+    update_rate = cfg['pc_update_rate']
+    resolution = cfg['pc_resolution']
+
 
 
 def launch_setup(context, *args, **kwargs):
     
     sensor_manager_parameters = {
         'sensors': ['ros'],
-        'octomap_resolution': 0.02,
+        'octomap_resolution': resolution,
         'ros.sensor_plugin': 'occupancy_map_monitor/PointCloudOctomapUpdater',
         'ros.point_cloud_topic': '/camera/depth/points',
-        'ros.max_range': 2.0, # max range of the point cloud sensor
-        'ros.point_subsample': 1, # subsample the point cloud by this factor
+        'ros.max_range': max_range, # max range of the point cloud sensor
+        'ros.point_subsample': subsample, # subsample the point cloud by this factor
         'ros.padding_offset': 0.1, # padding offset from the sensor origin
         'ros.padding_scale': 1.0, # padding scale around the sensor origin
-        'ros.max_update_rate': 1.0, # maximum update rate of the sensor
+        'ros.max_update_rate': update_rate, # maximum update rate of the sensor
         'ros.filtered_cloud_topic': 'filtered_cloud',
     }
     
