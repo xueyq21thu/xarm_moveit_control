@@ -156,15 +156,6 @@ def generate_launch_description():
         output='screen'
     )
     
-    # com_interface service run
-    # xarm_ros2/com_interface/com_interface/com_interface_srv.py
-    com_interface = Node(
-        package='com_interface',
-        executable='com_srv',
-        name='com_interface_srv',
-        output='screen'
-    )
-    
     # tf_publisher run
     # xarm_ros2/tf_publisher/tf_publisher/tf_publisher.py
     tf_publisher = Node(
@@ -183,30 +174,12 @@ def generate_launch_description():
         output='screen',
     )
     
-    # run quest3 connection
-    # ROS-TCP-Endpoint/ros_tcp_endpoint/default_server_endpoint.py
-    quest3 = Node(
-        package='ros_tcp_endpoint',
-        executable='default_server_endpoint',
-        name='quest3',
-        output='screen',
-    )
-    
     # finite state machine run
     # xarm_ros2/force_control/force_control/finite_state_machine.py
     fsm = Node(
         package='force_control',
         executable='fsm',
         name='finite_state_machine',
-        output='screen',
-    )
-    
-    # ft data pub run
-    # xarm_ros2/force_control/force_control/ft_pub.py
-    ft_pub = Node(
-        package='force_control',
-        executable='ft_pub',
-        name='ft_pub',
         output='screen',
     )
     
@@ -224,11 +197,8 @@ def generate_launch_description():
         robot_planner_node_launch,
         cam,
         gripper,
-        # com_interface,
         tf_publisher,
         fc,
-        # quest3
-        # ft_pub,
         # fsm,
         # ft_vis,
     ])
