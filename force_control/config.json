@@ -21,7 +21,7 @@
     "K": [10.0, 10.0, 10.0, 1.0, 1.0, 1.0],
     "B": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 
-    "pc_max_range": 2.0,
+    "pc_max_range": 1.0,
     "pc_subsample": 1,
     "pc_update_rate": 1.0,
     "pc_resolution": 0.005
